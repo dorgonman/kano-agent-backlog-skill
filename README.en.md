@@ -69,8 +69,13 @@ Buckets are per-100 (`0000`, `0100`, `0200`, ...) to avoid huge folders.
 
 - Agent rules: `SKILL.md`
 - References: `references/`
+- Reference index: `REFERENCE.md`
 
-If you’re looking for a working `_kano/backlog` example, use the demo host repo (or treat `references/templates.md` as your initialization input).
+If you're looking for a working `_kano/backlog` example, use the demo host repo (or treat `references/templates.md` as your initialization input).
+
+## External references
+
+- Agent skills overview (Anthropic/Claude): https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview
 
 ## Roadmap (direction, not promises)
 

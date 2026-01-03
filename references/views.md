@@ -1,5 +1,7 @@
 # Views (Obsidian Dataview)
 
+If you want fewer plugin dependencies, consider Obsidian **Bases** as a plugin-free alternative for table-style dashboards. See `references/bases.md`.
+
 ## Tree by parent
 
 Use Dataview or DataviewJS to build parent/child views from `parent` fields.
@@ -32,8 +34,10 @@ Generate plain Markdown lists (no Dataview required):
 ```bash
 bash _kano/backlog/tools/generate_active_view.sh
 bash _kano/backlog/tools/generate_new_view.sh
+bash _kano/backlog/tools/generate_done_view.sh
 ```
 
 Outputs:
-- `_kano/backlog/views/Active.md` (New + InProgress)
-- `_kano/backlog/views/New.md` (New only)
+- `_kano/backlog/views/Dashboard_PlainMarkdown_Active.md` (New + InProgress)
+- `_kano/backlog/views/Dashboard_PlainMarkdown_New.md` (New only)
+- `_kano/backlog/views/Dashboard_PlainMarkdown_Done.md` (Done + Dropped)

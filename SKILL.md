@@ -74,10 +74,12 @@ Use this skill to:
 
 ## References
 
+- Reference index: `REFERENCE.md`
 - Schema and rules: `references/schema.md`
 - Templates: `references/templates.md`
 - Workflow SOP: `references/workflow.md`
 - View patterns: `references/views.md`
+- Obsidian Bases (plugin-free): `references/bases.md`
 
 If the backlog structure is missing, propose creation and wait for user approval before writing files.
 

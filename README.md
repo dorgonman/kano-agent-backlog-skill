@@ -72,6 +72,12 @@ _kano/backlog/
 
 如果你在找「如何實際落地的 `_kano/backlog` 範例」，請參考本 skill 的 demo host repo（或把 `references/templates.md` 直接當作初始化腳本的輸入）。
 
+
+## 參考
+
+- Agent Skill 官方概念參考（Anthropic/Claude）：https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview
+- 本 skill 參考索引：`REFERENCE.md`（此 repo 使用多檔案 `references/` 以利按需載入）
+
 ## Roadmap（方向，不是承諾）
 
 - 提供可重用的 `_kano/backlog` bootstrap assets（模板 + tools）以便一鍵初始化
