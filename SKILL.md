@@ -40,7 +40,8 @@ Use this skill to:
 - Never include secrets in backlog files or logs.
 - File operations for backlog/skill artifacts must go through skill scripts
   (`scripts/backlog/*` or `scripts/fs/*`) so audit logs capture the action.
-- Skill scripts only operate on paths under `_kano/backlog/`; refuse other paths.
+- Skill scripts only operate on paths under `_kano/backlog/` or `_kano/backlog_sandbox/`;
+  refuse other paths.
 - Add Obsidian `[[wikilink]]` references in the body (e.g., a `## Links` section) so Graph/backlinks work; frontmatter alone does not create graph edges.
 
 ## ID prefix derivation
@@ -94,10 +95,12 @@ If the backlog structure is missing, propose creation and wait for user approval
 ## Scripts (optional automation)
 
 Backlog scripts:
+- `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold
 - `scripts/backlog/create_item.py`: create a new item with ID + bucket (Epic can also create an index file)
 - `scripts/backlog/update_state.py`: update `state` + `updated` and append Worklog
 - `scripts/backlog/validate_ready.py`: check Ready gate sections
 - `scripts/backlog/generate_view.py`: generate plain Markdown views
+- `scripts/backlog/seed_demo.py`: seed demo items and views
 - `scripts/backlog/test_scripts.py`: smoke tests for the backlog scripts
 
 Filesystem scripts:

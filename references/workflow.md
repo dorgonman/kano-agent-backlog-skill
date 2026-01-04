@@ -38,4 +38,4 @@
 ## F) File operations
 
 - Use `scripts/backlog/*` or `scripts/fs/*` for backlog/skill artifacts.
-- Scripts only operate under `_kano/backlog/` to keep audit logs clean.
+- Scripts only operate under `_kano/backlog/` or `_kano/backlog_sandbox/` to keep audit logs clean.

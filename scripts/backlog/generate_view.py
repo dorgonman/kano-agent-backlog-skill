@@ -6,7 +6,7 @@ import datetime
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 LOGGING_DIR = Path(__file__).resolve().parents[1] / "logging"
 if str(LOGGING_DIR) not in sys.path:
@@ -14,15 +14,30 @@ if str(LOGGING_DIR) not in sys.path:
 from audit_runner import run_with_audit  # noqa: E402
 
 
-def backlog_root_for_repo(repo_root: Path) -> Path:
-    return (repo_root / "_kano" / "backlog").resolve()
+def allowed_roots_for_repo(repo_root: Path) -> List[Path]:
+    return [
+        (repo_root / "_kano" / "backlog").resolve(),
+        (repo_root / "_kano" / "backlog_sandbox").resolve(),
+    ]
 
 
-def ensure_under_backlog(path: Path, backlog_root: Path, label: str) -> None:
-    try:
-        path.resolve().relative_to(backlog_root)
-    except ValueError as exc:
-        raise SystemExit(f"{label} must be under {backlog_root}: {path}") from exc
+def resolve_allowed_root(path: Path, allowed_roots: List[Path]) -> Optional[Path]:
+    resolved = path.resolve()
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            return root
+        except ValueError:
+            continue
+    return None
+
+
+def ensure_under_allowed(path: Path, allowed_roots: List[Path], label: str) -> Path:
+    root = resolve_allowed_root(path, allowed_roots)
+    if root is None:
+        allowed = " or ".join(str(root) for root in allowed_roots)
+        raise SystemExit(f"{label} must be under {allowed}: {path}")
+    return root
 
 
 STATE_GROUPS = {
@@ -165,16 +180,18 @@ def format_items(
 def main() -> int:
     args = parse_args()
     repo_root = Path.cwd().resolve()
-    backlog_root = backlog_root_for_repo(repo_root)
+    allowed_roots = allowed_roots_for_repo(repo_root)
     allowed_groups = [group.strip() for group in args.groups.split(",") if group.strip()]
     items_root = Path(args.items_root)
     if not items_root.is_absolute():
         items_root = (repo_root / items_root).resolve()
-    ensure_under_backlog(items_root, backlog_root, "items-root")
+    items_root_root = ensure_under_allowed(items_root, allowed_roots, "items-root")
     output_path = Path(args.output)
     if not output_path.is_absolute():
         output_path = (repo_root / output_path).resolve()
-    ensure_under_backlog(output_path, backlog_root, "output")
+    output_root = ensure_under_allowed(output_path, allowed_roots, "output")
+    if output_root != items_root_root:
+        raise SystemExit("items-root and output must share the same root.")
 
     source_label = args.source_label or args.items_root
     groups = collect_items(items_root, allowed_groups)

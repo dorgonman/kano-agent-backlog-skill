@@ -24,15 +24,30 @@ TYPE_MAP = {
 }
 
 
-def backlog_root_for_repo(repo_root: Path) -> Path:
-    return (repo_root / "_kano" / "backlog").resolve()
+def allowed_roots_for_repo(repo_root: Path) -> List[Path]:
+    return [
+        (repo_root / "_kano" / "backlog").resolve(),
+        (repo_root / "_kano" / "backlog_sandbox").resolve(),
+    ]
 
 
-def ensure_under_backlog(path: Path, backlog_root: Path, label: str) -> None:
-    try:
-        path.resolve().relative_to(backlog_root)
-    except ValueError as exc:
-        raise SystemExit(f"{label} must be under {backlog_root}: {path}") from exc
+def resolve_allowed_root(path: Path, allowed_roots: List[Path]) -> Optional[Path]:
+    resolved = path.resolve()
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            return root
+        except ValueError:
+            continue
+    return None
+
+
+def ensure_under_allowed(path: Path, allowed_roots: List[Path], label: str) -> Path:
+    root = resolve_allowed_root(path, allowed_roots)
+    if root is None:
+        allowed = " or ".join(str(root) for root in allowed_roots)
+        raise SystemExit(f"{label} must be under {allowed}: {path}")
+    return root
 
 
 def parse_args() -> argparse.Namespace:
@@ -322,12 +337,12 @@ def main() -> int:
     type_label, type_code, type_folder = TYPE_MAP[type_key]
 
     repo_root = Path.cwd().resolve()
-    allowed_root = backlog_root_for_repo(repo_root)
+    allowed_roots = allowed_roots_for_repo(repo_root)
 
     items_root = Path(args.items_root)
     if not items_root.is_absolute():
         items_root = (repo_root / items_root).resolve()
-    ensure_under_backlog(items_root, allowed_root, "items-root")
+    items_root_root = ensure_under_allowed(items_root, allowed_roots, "items-root")
 
     backlog_root = None
     if args.backlog_root:
@@ -337,7 +352,9 @@ def main() -> int:
     elif items_root.name == "items":
         backlog_root = items_root.parent
     if backlog_root:
-        ensure_under_backlog(backlog_root, allowed_root, "backlog-root")
+        backlog_root_root = ensure_under_allowed(backlog_root, allowed_roots, "backlog-root")
+        if backlog_root_root != items_root_root:
+            raise SystemExit("items-root and backlog-root must share the same root.")
 
     prefix = args.prefix
     if not prefix:

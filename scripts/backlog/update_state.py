@@ -5,7 +5,7 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 LOGGING_DIR = Path(__file__).resolve().parents[1] / "logging"
 if str(LOGGING_DIR) not in sys.path:
@@ -13,15 +13,28 @@ if str(LOGGING_DIR) not in sys.path:
 from audit_runner import run_with_audit  # noqa: E402
 
 
-def backlog_root_for_repo(repo_root: Path) -> Path:
-    return (repo_root / "_kano" / "backlog").resolve()
+def allowed_roots_for_repo(repo_root: Path) -> List[Path]:
+    return [
+        (repo_root / "_kano" / "backlog").resolve(),
+        (repo_root / "_kano" / "backlog_sandbox").resolve(),
+    ]
 
 
-def ensure_under_backlog(path: Path, backlog_root: Path) -> None:
-    try:
-        path.resolve().relative_to(backlog_root)
-    except ValueError as exc:
-        raise SystemExit(f"Item must be under {backlog_root}: {path}") from exc
+def resolve_allowed_root(path: Path, allowed_roots: List[Path]) -> Optional[Path]:
+    resolved = path.resolve()
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            return root
+        except ValueError:
+            continue
+    return None
+
+
+def ensure_under_allowed(path: Path, allowed_roots: List[Path]) -> None:
+    if resolve_allowed_root(path, allowed_roots) is None:
+        allowed = " or ".join(str(root) for root in allowed_roots)
+        raise SystemExit(f"Item must be under {allowed}: {path}")
 
 
 READY_SECTIONS = [
@@ -145,11 +158,11 @@ def append_worklog(lines: List[str], message: str, agent: str) -> List[str]:
 def main() -> int:
     args = parse_args()
     repo_root = Path.cwd().resolve()
-    backlog_root = backlog_root_for_repo(repo_root)
+    allowed_roots = allowed_roots_for_repo(repo_root)
     item_path = Path(args.item)
     if not item_path.is_absolute():
         item_path = (repo_root / item_path).resolve()
-    ensure_under_backlog(item_path, backlog_root)
+    ensure_under_allowed(item_path, allowed_roots)
     if not item_path.exists():
         raise SystemExit(f"Item not found: {item_path}")
 

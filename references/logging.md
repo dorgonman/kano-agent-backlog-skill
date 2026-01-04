@@ -74,3 +74,18 @@ Set these environment variables to adjust logging without code changes:
 - `KANO_AUDIT_LOG_FILE` to override the log filename.
 - `KANO_AUDIT_LOG_MAX_BYTES` to override rotation size (bytes).
 - `KANO_AUDIT_LOG_MAX_FILES` to override the number of rotated files kept.
+
+## Config defaults
+
+Logging scripts read defaults from `_kano/backlog/_config/config.json`:
+
+```json
+{
+  "log": {
+    "verbosity": "info",
+    "debug": false
+  }
+}
+```
+
+Precedence: environment overrides > config defaults.

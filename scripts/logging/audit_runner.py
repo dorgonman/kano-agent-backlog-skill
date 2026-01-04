@@ -9,6 +9,11 @@ from typing import Callable, List, Optional
 
 from audit_logger import DEFAULT_MAX_BYTES, DEFAULT_MAX_FILES, log_tool_invocation
 
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from config_loader import load_config  # noqa: E402
+
 
 def _env_flag(name: str) -> bool:
     value = os.getenv(name, "").strip().lower()
@@ -32,6 +37,14 @@ def _env_str(name: str) -> Optional[str]:
 
 def _logging_disabled() -> bool:
     return _env_flag("KANO_AUDIT_LOG_DISABLED")
+
+
+def _config_log_settings() -> tuple[str, bool]:
+    config = load_config()
+    log_cfg = config.get("log", {}) if isinstance(config, dict) else {}
+    verbosity = str(log_cfg.get("verbosity", "info")).strip().lower()
+    debug = bool(log_cfg.get("debug", False))
+    return verbosity, debug
 
 
 def _resolve_tool_name(argv: List[str], tool: Optional[str]) -> str:
@@ -78,12 +91,18 @@ def run_with_audit(
         raise
     finally:
         duration_ms = int((time.monotonic() - start) * 1000)
-        if not _logging_disabled():
-            log_root = _env_str("KANO_AUDIT_LOG_ROOT")
-            log_file = _env_str("KANO_AUDIT_LOG_FILE")
-            max_bytes = _env_int("KANO_AUDIT_LOG_MAX_BYTES") or DEFAULT_MAX_BYTES
-            max_files = _env_int("KANO_AUDIT_LOG_MAX_FILES") or DEFAULT_MAX_FILES
-            try:
+        try:
+            verbosity, debug = _config_log_settings()
+        except SystemExit:
+            verbosity, debug = "info", False
+        skip_log = _logging_disabled() or verbosity in {"off", "none", "disabled"}
+        log_root = _env_str("KANO_AUDIT_LOG_ROOT")
+        log_file = _env_str("KANO_AUDIT_LOG_FILE")
+        max_bytes = _env_int("KANO_AUDIT_LOG_MAX_BYTES") or DEFAULT_MAX_BYTES
+        max_files = _env_int("KANO_AUDIT_LOG_MAX_FILES") or DEFAULT_MAX_FILES
+        notes = "debug=true" if debug else None
+        try:
+            if not skip_log:
                 log_tool_invocation(
                     tool=tool_name,
                     argv=args,
@@ -92,10 +111,11 @@ def run_with_audit(
                     exit_code=exit_code,
                     duration_ms=duration_ms,
                     error=error,
+                    notes=notes,
                     log_root=log_root,
                     log_file=log_file,
                     max_bytes=max_bytes,
                     max_files=max_files,
                 )
-            except Exception:
-                pass
+        except Exception:
+            pass

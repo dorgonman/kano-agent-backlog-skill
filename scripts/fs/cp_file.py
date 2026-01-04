@@ -5,6 +5,7 @@ import argparse
 import shutil
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 LOGGING_DIR = Path(__file__).resolve().parents[1] / "logging"
 if str(LOGGING_DIR) not in sys.path:
@@ -12,8 +13,11 @@ if str(LOGGING_DIR) not in sys.path:
 from audit_runner import run_with_audit  # noqa: E402
 
 
-def backlog_root_for_repo(repo_root: Path) -> Path:
-    return (repo_root / "_kano" / "backlog").resolve()
+def allowed_roots_for_repo(repo_root: Path) -> List[Path]:
+    return [
+        (repo_root / "_kano" / "backlog").resolve(),
+        (repo_root / "_kano" / "backlog_sandbox").resolve(),
+    ]
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,22 +40,36 @@ def resolve_path(value: str, repo_root: Path) -> Path:
     return path
 
 
-def ensure_inside_backlog(path: Path, backlog_root: Path) -> None:
-    try:
-        path.relative_to(backlog_root)
-    except ValueError as exc:
-        raise SystemExit(f"Path must be inside {backlog_root}: {path}") from exc
+def resolve_allowed_root(path: Path, allowed_roots: List[Path]) -> Optional[Path]:
+    resolved = path.resolve()
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            return root
+        except ValueError:
+            continue
+    return None
+
+
+def ensure_inside_allowed(path: Path, allowed_roots: List[Path]) -> Path:
+    root = resolve_allowed_root(path, allowed_roots)
+    if root is None:
+        allowed = " or ".join(str(root) for root in allowed_roots)
+        raise SystemExit(f"Path must be inside {allowed}: {path}")
+    return root
 
 
 def main() -> int:
     args = parse_args()
     repo_root = Path.cwd().resolve()
-    backlog_root = backlog_root_for_repo(repo_root)
+    allowed_roots = allowed_roots_for_repo(repo_root)
 
     src = resolve_path(args.src, repo_root)
     dest = resolve_path(args.dest, repo_root)
-    ensure_inside_backlog(src, backlog_root)
-    ensure_inside_backlog(dest, backlog_root)
+    src_root = ensure_inside_allowed(src, allowed_roots)
+    dest_root = ensure_inside_allowed(dest, allowed_roots)
+    if src_root != dest_root:
+        raise SystemExit("Source and destination must share the same root.")
 
     if not src.exists():
         raise SystemExit(f"Source not found: {src}")
