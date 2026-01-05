@@ -22,6 +22,12 @@
    - Add ADR id to item `decisions: []`
    - Append Worklog entry referencing the ADR
 
+### Conflict Guard
+
+- **Owner Locking**: Items in `InProgress` are locked to their owner.
+- **Auto-Assignment**: When moving to `InProgress`, if no owner is set, you become the owner.
+- **Collaboration**: To hand off work, the current owner must change the owner field or move the item out of `InProgress` (e.g. to `Review` or `Planned`).
+
 ## D) Completion
 
 1. Move state to Review -> Done.

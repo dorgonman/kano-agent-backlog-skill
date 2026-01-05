@@ -108,13 +108,15 @@ def find_frontmatter(lines: List[str]) -> Tuple[int, int]:
     return -1, -1
 
 
-def update_frontmatter(lines: List[str], state: str, updated_date: str) -> List[str]:
+def update_frontmatter(lines: List[str], state: str, updated_date: str, owner: Optional[str] = None) -> List[str]:
     start, end = find_frontmatter(lines)
     if start == -1:
         raise ValueError("Frontmatter not found.")
 
     updated = False
     state_updated = False
+    owner_updated = False
+    owner_exists = False
     for idx in range(start + 1, end):
         if lines[idx].startswith("state:"):
             lines[idx] = f"state: {state}"
@@ -122,11 +124,23 @@ def update_frontmatter(lines: List[str], state: str, updated_date: str) -> List[
         if lines[idx].startswith("updated:"):
             lines[idx] = f"updated: {updated_date}"
             updated = True
+        if lines[idx].startswith("owner:"):
+            owner_exists = True
+            if owner is not None:
+                lines[idx] = f"owner: {owner}"
+                owner_updated = True
 
     if not state_updated:
         raise ValueError("Frontmatter missing state field.")
     if not updated:
         raise ValueError("Frontmatter missing updated field.")
+    
+    # If owner should be set but field doesn't exist, add it before the closing ---
+    if owner is not None and not owner_exists:
+        # Insert owner field before the closing ---
+        lines.insert(end, f"owner: {owner}")
+        owner_updated = True
+    
     return lines
 
 
@@ -282,7 +296,8 @@ def advance_parent_state(
         return False
     lines = load_lines(parent.path)
     updated_date = datetime.now().strftime("%Y-%m-%d")
-    lines = update_frontmatter(lines, target_state, updated_date)
+    # Don't change owner when auto-syncing parent state
+    lines = update_frontmatter(lines, target_state, updated_date, owner=None)
     message = f"Auto-sync from child {source_id} -> {target_state}."
     lines = append_worklog(lines, message, agent)
     write_lines(parent.path, lines)
@@ -335,6 +350,33 @@ def main() -> int:
 
     target_state = args.state or STATE_ACTIONS[args.action]
     lines = load_lines(item_path)
+    
+    # Parse current frontmatter to check owner and state
+    frontmatter = parse_frontmatter(lines)
+    current_state = frontmatter.get("state", "").strip()
+    current_owner = frontmatter.get("owner", "").strip()
+    
+    # Conflict guard: if item is InProgress and owned by someone else, reject
+    if current_state == "InProgress" and current_owner and current_owner.lower() != "null":
+        if current_owner != args.agent:
+            raise SystemExit(
+                f"Item is already InProgress and owned by '{current_owner}'. "
+                f"Only the owner can update this item. Current agent: '{args.agent}'."
+            )
+    
+    # Auto-assign owner when moving to InProgress
+    owner_to_set = None
+    if target_state == "InProgress":
+        # If no owner or owner is null, set to current agent
+        if not current_owner or current_owner.lower() == "null":
+            owner_to_set = args.agent
+        # If already owned by current agent, keep it
+        elif current_owner == args.agent:
+            owner_to_set = args.agent
+        # If owned by someone else but state is not InProgress yet, this shouldn't happen
+        # (we already checked above), but handle gracefully
+        else:
+            owner_to_set = current_owner
 
     if target_state == "Ready" and not args.force:
         missing = validate_ready(lines)
@@ -342,7 +384,7 @@ def main() -> int:
             raise SystemExit(f"Ready gate incomplete: {', '.join(missing)}")
 
     updated_date = datetime.now().strftime("%Y-%m-%d")
-    lines = update_frontmatter(lines, target_state, updated_date)
+    lines = update_frontmatter(lines, target_state, updated_date, owner=owner_to_set)
 
     message = args.message or f"State -> {target_state}."
     lines = append_worklog(lines, message, args.agent)

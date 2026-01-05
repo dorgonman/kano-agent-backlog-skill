@@ -48,7 +48,18 @@ Optionally, create `_kano/backlog/` in your project repo to store items, ADRs, v
 2) (Optional) Open the repo in Obsidian and enable the Dataview plugin
 3) Open `_kano/backlog/views/Dashboard.md` or build your own views from `references/views.md`
 4) Before any code change, have the agent create a Task/Bug using `references/templates.md` and satisfy the Ready gate
-5) When a load-bearing decision happens, append a Worklog line; create an ADR when it’s truly architectural and link it
+5) When a load-bearing decision happens, append a Worklog line; create an ADR when it's truly architectural and link it
+
+## Self-contained bootstrap (init + seed)
+
+```bash
+python scripts/backlog/init_backlog.py --backlog-root _kano/backlog
+python scripts/backlog/seed_demo.py --backlog-root _kano/backlog --agent <agent-name>
+```
+
+- `init_backlog.py` creates the `_kano/backlog/` scaffold and `_kano/backlog/_meta/indexes.md`.
+- `seed_demo.py` creates demo Epic/Feature/UserStory/Task/Bug items tagged `demo-seed`, plus `Dashboard_PlainMarkdown_*.md` views (unless `--skip-views`).
+- Use `--dry-run` to preview and `--force` to overwrite existing baseline files or allow reseeding.
 
 ## Recommended backlog structure (in your project)
 

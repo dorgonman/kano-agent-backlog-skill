@@ -49,6 +49,19 @@ workflows.
 - `states` should align with `state` values used in items.
 - Keep transitions permissive for agent autonomy; tighten only if needed.
 
+## State semantics (standard set)
+
+These semantics apply to built-ins that use the default KABSD state set:
+
+- Proposed: not ready to start; needs more discovery/confirmation.
+- Planned: approved for the plan; detail refinement can proceed, but not started.
+- Ready: Ready gate passed (typically for Task/Bug before start).
+- InProgress: work started.
+- Blocked: work started but blocked.
+- Review: work complete pending review/verification.
+- Done: work complete and accepted.
+- Dropped: work intentionally stopped.
+
 ## Config selection
 
 Use `process.profile` and `process.path` in `_kano/backlog/_config/config.json`
@@ -59,3 +72,24 @@ to choose a built-in profile or a custom file.
 - `references/processes/azure-boards-agile.json` -> `builtin/azure-boards-agile`
 - `references/processes/scrum.json` -> `builtin/scrum`
 - `references/processes/cmmi.json` -> `builtin/cmmi`
+- `references/processes/jira-default.json` -> `builtin/jira-default`
+
+## Custom profiles
+
+Use the template as a starting point and store it under your backlog config
+area (recommended: `_kano/backlog/_config/processes/`), then point
+`process.path` to that file.
+
+Template:
+- `references/processes/template.json`
+
+Example config:
+
+```json
+{
+  "process": {
+    "profile": null,
+    "path": "_kano/backlog/_config/processes/custom.json"
+  }
+}
+```

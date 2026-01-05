@@ -1,14 +1,15 @@
 # Backlog Schema
 
-## Item types
+## Process-defined types and states
 
-- Epic
-- Feature
-- UserStory
-- Task
-- Bug
+Item types and states come from the active process profile. See
+`references/processes.md` and the profile selected via
+`_kano/backlog/_config/config.json` (`process.profile` or `process.path`).
 
-## Parent rules
+When scripts or docs need workflow details, they should load the profile
+specified in config (built-in or custom) instead of hardcoding the list.
+
+## Parent rules (default)
 
 - Epic -> Feature
 - Feature -> UserStory
@@ -17,27 +18,8 @@
 - Task -> Task (optional sub-task)
 - Epic has no parent
 
-## States
-
-- Proposed
-- Planned
-- Ready
-- InProgress
-- Blocked
-- Review
-- Done
-- Dropped
-
-## State semantics (summary)
-
-- Proposed: not ready to start; needs more discovery/confirmation.
-- Planned: approved for the plan; detail refinement can proceed, but not started.
-- Ready: Ready gate passed (typically for Task/Bug before start).
-- InProgress: work started.
-- Blocked: work started but blocked.
-- Review: work complete pending review/verification.
-- Done: work complete and accepted.
-- Dropped: work intentionally stopped.
+These defaults align with built-in profiles; custom processes may define
+different parent relationships.
 
 ## Parent state sync (forward-only)
 
@@ -108,4 +90,27 @@ decisions: []
 ## Immutable fields
 
 - `id`, `type`, `created` must not be changed after creation.
+
+## Config defaults (baseline)
+
+Baseline config lives at `_kano/backlog/_config/config.json` and defaults to:
+
+```
+{
+  "log": { "verbosity": "info", "debug": false },
+  "process": { "profile": "builtin/azure-boards-agile", "path": null },
+  "sandbox": { "root": "_kano/backlog_sandbox" },
+  "index": { "enabled": false, "backend": "sqlite", "path": null, "mode": "rebuild" }
+}
+```
+
+## Config overrides (environment)
+
+- `KANO_BACKLOG_CONFIG_PATH`: override config file path (must be under `_kano/backlog` or `_kano/backlog_sandbox`).
+- Audit log env overrides (highest precedence over config defaults):
+  - `KANO_AUDIT_LOG_DISABLED`
+  - `KANO_AUDIT_LOG_ROOT`
+  - `KANO_AUDIT_LOG_FILE`
+  - `KANO_AUDIT_LOG_MAX_BYTES`
+  - `KANO_AUDIT_LOG_MAX_FILES`
 

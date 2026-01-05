@@ -12,7 +12,7 @@ from audit_logger import DEFAULT_MAX_BYTES, DEFAULT_MAX_FILES, log_tool_invocati
 COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
 if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
-from config_loader import load_config  # noqa: E402
+from config_loader import get_config_value, load_config_with_defaults  # noqa: E402
 
 
 def _env_flag(name: str) -> bool:
@@ -40,10 +40,9 @@ def _logging_disabled() -> bool:
 
 
 def _config_log_settings() -> tuple[str, bool]:
-    config = load_config()
-    log_cfg = config.get("log", {}) if isinstance(config, dict) else {}
-    verbosity = str(log_cfg.get("verbosity", "info")).strip().lower()
-    debug = bool(log_cfg.get("debug", False))
+    config = load_config_with_defaults()
+    verbosity = str(get_config_value(config, "log.verbosity", "info")).strip().lower()
+    debug = bool(get_config_value(config, "log.debug", False))
     return verbosity, debug
 
 

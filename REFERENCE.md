@@ -11,18 +11,23 @@ The `references/` folder is intentionally split into multiple small files so an 
 - `bases.md`: Obsidian Bases notes (plugin-free table-style views)
 - `logging.md`: audit log schema, redaction, rotation defaults
 - `processes.md`: process profile schema and examples
+- `indexing_schema.sql`: optional DB index schema (SQLite-first)
+- `indexing_schema.json`: DB schema description (machine-readable)
 
 ## Scripts (optional automation)
 
 Backlog scripts:
-- `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold
+- `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold (folders + `_meta/indexes.md` + backlog `README.md`)
 - `scripts/backlog/create_item.py`: create a new item from template (ID + bucket + optional Epic index)
 - `scripts/backlog/update_state.py`: update `state` + `updated` and append Worklog
 - `scripts/backlog/validate_ready.py`: check Ready gate sections
 - `scripts/backlog/generate_view.py`: generate plain Markdown views
 - `scripts/backlog/generate_epic_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
-- `scripts/backlog/seed_demo.py`: seed demo items and views
+- `scripts/backlog/seed_demo.py`: seed demo Epic/Feature/UserStory/Task/Bug items (tagged `demo-seed`) and plain Markdown views
 - `scripts/backlog/test_scripts.py`: smoke tests for the backlog scripts
+
+Indexing scripts:
+- `scripts/indexing/build_sqlite_index.py`: build a rebuildable SQLite index for file-first backlog items
 
 Filesystem scripts:
 - `scripts/fs/cp_file.py`: copy a file inside the repo
@@ -37,6 +42,7 @@ Logging scripts:
 
 Shared helpers:
 - `scripts/common/config_loader.py`: load config from `_kano/backlog/_config/config.json`
+- `scripts/common/validate_config.py`: validate config file structure and types
 
 Test scripts:
 - `scripts/tests/validate_userstories.py`: validate user story expectations
