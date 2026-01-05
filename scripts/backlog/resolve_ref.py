@@ -32,9 +32,10 @@ def resolve_ref(ref: str, index: BacklogIndex):
 
 def print_item(item: BacklogItem, fmt: str):
     if fmt == "json":
-        # Can't directly serialize Path object
         d = asdict(item)
         d['path'] = str(d['path'])
+        if 'frontmatter' in d:
+            del d['frontmatter']
         print(json.dumps(d, indent=2))
     elif fmt == "path":
         print(str(item.path))
@@ -101,6 +102,8 @@ def main():
             for m in matches:
                 d = asdict(m)
                 d['path'] = str(d['path'])
+                if 'frontmatter' in d:
+                    del d['frontmatter']
                 out.append(d)
             print(json.dumps(out, indent=2))
         else:
