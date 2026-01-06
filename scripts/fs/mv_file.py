@@ -84,6 +84,14 @@ def refresh_dashboards(backlog_root: Path, agent: str, config_path: Optional[str
         raise SystemExit(result.stderr.strip() or result.stdout.strip() or "Failed to refresh dashboards.")
 
 
+def permission_hint(path: Path) -> str:
+    return (
+        "Access denied (WinError 5). The file may be locked/open or read-only. "
+        "Close any apps using it, check file attributes, or run: "
+        f"python skills/kano-agent-backlog-skill/scripts/fs/diagnose_lock.py --path {path}"
+    )
+
+
 def main() -> int:
     args = parse_args()
     repo_root = Path.cwd().resolve()
@@ -112,7 +120,12 @@ def main() -> int:
         return 0
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dest))
+    try:
+        shutil.move(str(src), str(dest))
+    except PermissionError as exc:
+        if getattr(exc, "winerror", None) == 5:
+            raise SystemExit(permission_hint(src))
+        raise
     print(f"Moved: {src} -> {dest}")
     if not args.no_refresh and should_auto_refresh(config):
         refresh_dashboards(backlog_root=src_root, agent=args.agent, config_path=args.config)

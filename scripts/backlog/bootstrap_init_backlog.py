@@ -18,6 +18,7 @@ COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
 if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
 from config_loader import default_config, allowed_roots_for_repo, resolve_allowed_root  # noqa: E402
+import context  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,9 +26,17 @@ def parse_args() -> argparse.Namespace:
         description="Initialize backlog scaffold under a permitted root."
     )
     parser.add_argument(
+        "--product",
+        help="Product name to initialize (e.g. kano-agent-backlog-skill).",
+    )
+    parser.add_argument(
+        "--sandbox",
+        action="store_true",
+        help="Target the sandbox environment for the product.",
+    )
+    parser.add_argument(
         "--backlog-root",
-        default="_kano/backlog",
-        help="Backlog root path (default: _kano/backlog).",
+        help="Explicit backlog root path (overrides product logic).",
     )
     parser.add_argument(
         "--force",
@@ -55,7 +64,7 @@ def write_file(path: Path, content: str, force: bool, dry_run: bool) -> None:
     if dry_run:
         print(f"[DRY] write {path}")
         return
-    path.write_text(content, encoding="ascii")
+    path.write_text(content, encoding="utf-8")
     print(f"Wrote: {path}")
 
 
@@ -69,12 +78,25 @@ def make_dir(path: Path, dry_run: bool) -> None:
 def main() -> int:
     args = parse_args()
     repo_root = Path.cwd().resolve()
-    allowed_roots = allowed_roots_for_repo(repo_root)
-    backlog_root = Path(args.backlog_root)
-    if not backlog_root.is_absolute():
-        backlog_root = (repo_root / backlog_root).resolve()
+    
+    # Resolve Backlog Root
+    if args.backlog_root:
+        backlog_root = Path(args.backlog_root)
+        if not backlog_root.is_absolute():
+            backlog_root = (repo_root / backlog_root).resolve()
+    else:
+        product_name = context.resolve_product(args.product, repo_root=repo_root)
+        print(f"Targeting product: {product_name} (Sandbox: {args.sandbox})")
+        backlog_root = context.get_product_root(
+            product_name, is_sandbox=args.sandbox, repo_root=repo_root
+        )
 
+    allowed_roots = allowed_roots_for_repo(repo_root)
+    # Ensure our new product paths are allowed. 
+    # allowed_roots_for_repo likely returns _kano/backlog, which covers products/
     ensure_under_allowed(backlog_root, allowed_roots, "backlog-root")
+
+    print(f"Initializing backlog at: {backlog_root}")
 
     dirs = [
         backlog_root / "_config",
@@ -95,7 +117,7 @@ def main() -> int:
     readme_path = backlog_root / "README.md"
     readme_content = "\n".join(
         [
-            "# _kano/backlog/",
+            f"# {backlog_root.name} Backlog",
             "",
             "Local-first project backlog (file-based).",
             "",
@@ -127,8 +149,16 @@ def main() -> int:
     write_file(index_path, index_content, args.force, args.dry_run)
 
     config_path = backlog_root / "_config" / "config.json"
-    baseline = {"_comment": "Baseline config for kano-agent-backlog-skill."}
-    baseline.update(default_config())
+    baseline = {"_comment": f"Baseline config for {backlog_root.name}."}
+    
+    # We load standard defaults, but we should override project name if we know it
+    defaults = default_config()
+    defaults["project"]["name"] = args.product or backlog_root.name
+    # Sandbox root should perhaps be relative or point to the matching sandbox?
+    # But context handles that. The config might want to know where its sandbox is.
+    # defaults["sandbox"]["root"] = ... let's leave default for now or fix it.
+    
+    baseline.update(defaults)
     config_content = json.dumps(baseline, indent=2, ensure_ascii=True) + "\n"
     write_file(config_path, config_content, args.force, args.dry_run)
 
@@ -145,11 +175,12 @@ def main() -> int:
             "- Generated outputs: `Dashboard_PlainMarkdown_{Active,New,Done}.md`",
             "",
             "Refresh generated dashboards:",
-            "- `python skills/kano-agent-backlog-skill/scripts/backlog/view_refresh_dashboards.py --backlog-root _kano/backlog --agent <agent-name>`",
+            "# ToDo: Update this command to be product-aware",
+            f"- `python skills/kano-agent-backlog-skill/scripts/backlog/view_refresh_dashboards.py --product {args.product or 'PRODUCT'} --agent <agent-name>`",
             "",
             "## Optional: SQLite index",
             "",
-            "If `index.enabled=true` in `_kano/backlog/_config/config.json`, scripts can prefer SQLite for faster reads,",
+            "If `index.enabled=true` in `_config/config.json`, scripts can prefer SQLite for faster reads,",
             "while Markdown files remain the source of truth.",
             "",
         ]
