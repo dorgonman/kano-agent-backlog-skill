@@ -10,6 +10,10 @@ from typing import Any, Dict, List, Optional
 
 DEFAULT_CONFIG_PATH = "_kano/backlog/_config/config.json"
 DEFAULT_CONFIG = {
+    "project": {
+        "name": None,
+        "prefix": None,
+    },
     "log": {
         "verbosity": "info",
         "debug": False,
@@ -121,6 +125,21 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
     errors: List[str] = []
     if not isinstance(config, dict):
         return ["Config must be a JSON object."]
+
+    project_cfg = config.get("project", {})
+    if project_cfg is not None and not isinstance(project_cfg, dict):
+        errors.append("project must be an object.")
+    else:
+        name = project_cfg.get("name") if isinstance(project_cfg, dict) else None
+        if name is not None and not isinstance(name, str):
+            errors.append("project.name must be a string or null.")
+        prefix = project_cfg.get("prefix") if isinstance(project_cfg, dict) else None
+        if prefix is not None and not isinstance(prefix, str):
+            errors.append("project.prefix must be a string or null.")
+        elif isinstance(prefix, str):
+            trimmed = prefix.strip()
+            if trimmed and not trimmed.isalnum():
+                errors.append("project.prefix must be alphanumeric (A-Z0-9).")
 
     log_cfg = config.get("log", {})
     if log_cfg is not None and not isinstance(log_cfg, dict):

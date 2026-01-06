@@ -5,30 +5,7 @@ import json
 from pathlib import Path
 from dataclasses import asdict
 from lib.index import BacklogIndex, BacklogItem
-
-def resolve_ref(ref: str, index: BacklogIndex):
-    # 1. Full UID
-    if len(ref) == 36 and "-" in ref:
-        item = index.get_by_uid(ref)
-        if item:
-            return [item]
-            
-    # 2. id@uidshort
-    if "@" in ref:
-        did, short = ref.split("@", 1)
-        candidates = index.get_by_id(did)
-        matches = [c for c in candidates if c.uidshort.startswith(short)]
-        return matches
-        
-    # 3. uidshort (8 chars hex)
-    # Simple heuristic: 8 chars hex could be short uid
-    if len(ref) == 8 and all(c in "0123456789abcdefABCDEF" for c in ref):
-        matches = index.get_by_uidshort(ref)
-        if matches:
-            return matches
-            
-    # 4. Display ID
-    return index.get_by_id(ref)
+from lib.resolver import resolve_ref
 
 def print_item(item: BacklogItem, fmt: str):
     if fmt == "json":

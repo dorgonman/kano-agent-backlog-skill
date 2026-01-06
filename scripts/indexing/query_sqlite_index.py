@@ -138,7 +138,7 @@ def open_readonly(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
-_SQL_FIRST_TOKEN = re.compile(r"^\\s*(with|select)\\b", re.IGNORECASE)
+_SQL_FIRST_TOKEN = re.compile(r"^\s*(with|select)\b", re.IGNORECASE)
 
 
 def assert_select_only(sql: str) -> None:
@@ -293,4 +293,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(run_with_audit(main))
-

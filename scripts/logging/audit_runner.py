@@ -46,6 +46,27 @@ def _config_log_settings() -> tuple[str, bool]:
     return verbosity, debug
 
 
+def _level_value(name: str) -> int:
+    normalized = name.strip().lower()
+    if normalized == "warn":
+        normalized = "warning"
+    return {
+        "debug": 10,
+        "info": 20,
+        "warning": 30,
+        "error": 40,
+        "off": 100,
+        "none": 100,
+        "disabled": 100,
+    }.get(normalized, 20)
+
+
+def _event_level(status: str, exit_code: int) -> int:
+    if status != "ok" or exit_code != 0:
+        return 40
+    return 20
+
+
 def _resolve_tool_name(argv: List[str], tool: Optional[str]) -> str:
     if tool:
         return tool
@@ -101,7 +122,8 @@ def run_with_audit(
         max_files = _env_int("KANO_AUDIT_LOG_MAX_FILES") or DEFAULT_MAX_FILES
         notes = "debug=true" if debug else None
         try:
-            if not skip_log:
+            min_level = _level_value("debug" if debug else verbosity)
+            if not skip_log and _event_level(status, exit_code) >= min_level:
                 log_tool_invocation(
                     tool=tool_name,
                     argv=args,

@@ -90,6 +90,16 @@ If you're looking for a working `_kano/backlog` example, use the demo host repo 
 ## External references
 
 - Agent skills overview (Anthropic/Claude): https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview
+- Versioning policy: `VERSIONING.md`
+- Release notes: `CHANGELOG.md`
+
+## Version
+
+Show the current skill version:
+
+```bash
+python scripts/backlog/show_version.py --agent <agent-name>
+```
 
 ## Roadmap (direction, not promises)
 

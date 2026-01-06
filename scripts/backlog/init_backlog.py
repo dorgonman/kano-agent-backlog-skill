@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+import json
 from pathlib import Path
 from typing import List, Optional
+
+sys.dont_write_bytecode = True
 
 LOGGING_DIR = Path(__file__).resolve().parents[1] / "logging"
 if str(LOGGING_DIR) not in sys.path:
@@ -14,7 +17,7 @@ from audit_runner import run_with_audit  # noqa: E402
 COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
 if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
-from config_loader import allowed_roots_for_repo, resolve_allowed_root  # noqa: E402
+from config_loader import default_config, allowed_roots_for_repo, resolve_allowed_root  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,6 +77,8 @@ def main() -> int:
     ensure_under_allowed(backlog_root, allowed_roots, "backlog-root")
 
     dirs = [
+        backlog_root / "_config",
+        backlog_root / "_index",
         backlog_root / "_meta",
         backlog_root / "decisions",
         backlog_root / "items" / "epics",
@@ -120,6 +125,65 @@ def main() -> int:
         ]
     )
     write_file(index_path, index_content, args.force, args.dry_run)
+
+    config_path = backlog_root / "_config" / "config.json"
+    baseline = {"_comment": "Baseline config for kano-agent-backlog-skill."}
+    baseline.update(default_config())
+    config_content = json.dumps(baseline, indent=2, ensure_ascii=True) + "\n"
+    write_file(config_path, config_content, args.force, args.dry_run)
+
+    dashboard_index_path = backlog_root / "views" / "Dashboard.md"
+    dashboard_index_content = "\n".join(
+        [
+            "# Dashboard",
+            "",
+            "This folder can host multiple view styles over the same file-first backlog items.",
+            "",
+            "## Plain Markdown (no plugins)",
+            "",
+            "- `Dashboard_PlainMarkdown.md` (embeds the generated lists)",
+            "- Generated outputs: `Dashboard_PlainMarkdown_{Active,New,Done}.md`",
+            "",
+            "Refresh generated dashboards:",
+            "- `python skills/kano-agent-backlog-skill/scripts/backlog/refresh_dashboards.py --backlog-root _kano/backlog --agent <agent-name>`",
+            "",
+            "## Optional: SQLite index",
+            "",
+            "If `index.enabled=true` in `_kano/backlog/_config/config.json`, scripts can prefer SQLite for faster reads,",
+            "while Markdown files remain the source of truth.",
+            "",
+        ]
+    )
+    write_file(dashboard_index_path, dashboard_index_content, args.force, args.dry_run)
+
+    plain_dashboard_path = backlog_root / "views" / "Dashboard_PlainMarkdown.md"
+    plain_dashboard_content = "\n".join(
+        [
+            "# Dashboard (Plain Markdown)",
+            "",
+            "Embeds the generated Markdown lists (no Obsidian plugins required).",
+            "",
+            "![[Dashboard_PlainMarkdown_Active.md]]",
+            "",
+            "![[Dashboard_PlainMarkdown_New.md]]",
+            "",
+            "![[Dashboard_PlainMarkdown_Done.md]]",
+            "",
+        ]
+    )
+    write_file(plain_dashboard_path, plain_dashboard_content, args.force, args.dry_run)
+
+    tools_readme_path = backlog_root / "tools" / "README.md"
+    tools_readme_content = "\n".join(
+        [
+            "# Backlog Tools (project-specific)",
+            "",
+            "Keep project-only scripts here (e.g., iteration views, last-N-days focus views).",
+            "Generic workflows should live in the skill under `skills/kano-agent-backlog-skill/scripts/`.",
+            "",
+        ]
+    )
+    write_file(tools_readme_path, tools_readme_content, args.force, args.dry_run)
     return 0
 
 

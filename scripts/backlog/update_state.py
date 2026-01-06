@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from lib.index import BacklogIndex
+from lib.resolver import resolve_ref
 
 LOGGING_DIR = Path(__file__).resolve().parents[1] / "logging"
 if str(LOGGING_DIR) not in sys.path:
@@ -338,6 +340,21 @@ def main() -> int:
     item_path = Path(args.item)
     if not item_path.is_absolute():
         item_path = (repo_root / item_path).resolve()
+    # Try resolving if path not recognized
+    if resolve_allowed_root(item_path, allowed_roots) is None or not item_path.exists():
+        backlog_root = repo_root / "_kano" / "backlog"
+        if backlog_root.exists():
+            try:
+                index = BacklogIndex(backlog_root)
+                matches = resolve_ref(args.item, index)
+                if len(matches) == 1:
+                    item_path = matches[0].path
+                    print(f"Resolved '{args.item}' to {item_path.name}")
+                elif len(matches) > 1:
+                    raise SystemExit(f"Ambiguous reference: '{args.item}' matches {len(matches)} items.")
+            except ImportError:
+                 pass
+
     ensure_under_allowed(item_path, allowed_roots)
     if not item_path.exists():
         raise SystemExit(f"Item not found: {item_path}")

@@ -8,6 +8,12 @@ import sys
 import unicodedata
 from pathlib import Path
 from typing import List, Optional
+from lib.utils import generate_uid
+
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from config_loader import get_config_value, load_config_with_defaults, validate_config  # noqa: E402
 
 LOGGING_DIR = Path(__file__).resolve().parents[1] / "logging"
 if str(LOGGING_DIR) not in sys.path:
@@ -70,6 +76,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tags", default="", help="Comma-separated tags.")
     parser.add_argument("--owner", default="null", help="Owner value or null.")
     parser.add_argument("--agent", required=True, help="Worklog agent name (required).")
+    parser.add_argument(
+        "--config",
+        help=(
+            "Optional config path override (default: KANO_BACKLOG_CONFIG_PATH or _kano/backlog/_config/config.json). "
+            "Used for project.name/prefix defaults."
+        ),
+    )
     parser.add_argument("--project-name", help="Project name override.")
     parser.add_argument("--prefix", help="ID prefix override.")
     parser.add_argument(
@@ -245,6 +258,7 @@ def update_index_registry(path: Path, item_id: str, index_file: str, updated: st
 
 def render_item(
     item_id: str,
+    uid: str,
     item_type: str,
     title: str,
     priority: str,
@@ -262,6 +276,7 @@ def render_item(
     lines = [
         "---",
         f"id: {item_id}",
+        f"uid: {uid}",
         f"type: {item_type}",
         f"title: \"{title}\"",
         "state: Proposed",
@@ -358,10 +373,21 @@ def main() -> int:
 
     prefix = args.prefix
     if not prefix:
-        project_name = args.project_name or read_project_name(Path("config/profile.env"))
-        if not project_name:
-            raise SystemExit("PROJECT_NAME not found. Provide --project-name or --prefix.")
-        prefix = derive_prefix(project_name)
+        config = load_config_with_defaults(repo_root=repo_root, config_path=args.config)
+        errors = validate_config(config)
+        if errors:
+            raise SystemExit("Invalid config:\n- " + "\n- ".join(errors))
+
+        config_prefix = get_config_value(config, "project.prefix")
+        if isinstance(config_prefix, str) and config_prefix.strip():
+            prefix = config_prefix.strip()
+        else:
+            config_project_name = get_config_value(config, "project.name")
+            project_name = args.project_name or (config_project_name if isinstance(config_project_name, str) else None)
+            project_name = project_name or read_project_name(Path("config/profile.env"))
+            if not project_name:
+                raise SystemExit("PROJECT_NAME not found. Provide --project-name or --prefix.")
+            prefix = derive_prefix(project_name)
 
     parent = normalize_nullable(args.parent)
     if type_label != "Epic" and parent == "null":
@@ -387,8 +413,11 @@ def main() -> int:
     tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
     date = datetime.datetime.now().strftime("%Y-%m-%d")
 
+    uid = generate_uid()
+
     item_body = render_item(
         item_id=item_id,
+        uid=uid,
         item_type=type_label,
         title=args.title,
         priority=args.priority,

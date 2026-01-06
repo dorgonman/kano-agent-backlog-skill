@@ -54,9 +54,29 @@ Use this skill to:
   for manual re-plans where parent state should stay put.
 - Add Obsidian `[[wikilink]]` references in the body (e.g., a `## Links` section) so Graph/backlinks work; frontmatter alone does not create graph edges.
 
+## First-run bootstrap (enable the backlog system)
+
+When this skill is present but the backlog scaffold is missing (no `_kano/backlog/` or no `_kano/backlog/_config/config.json`):
+
+1) Ask the user whether to enable the backlog system for this repo.
+2) If approved, run the initializer:
+   - `python scripts/backlog/init_project.py --agent <agent-name> --backlog-root _kano/backlog`
+
+What it does:
+- Creates `_kano/backlog/` scaffold (items/decisions/views + `_meta/indexes.md`)
+- Writes baseline config to `_kano/backlog/_config/config.json` and sets `project.name`/`project.prefix`
+- Refreshes canonical dashboards (`views/Dashboard_PlainMarkdown_*.md`)
+- Optionally writes/updates agent guide files at repo root (templates):
+  - `--write-guides create` (creates `AGENTS.md` / `CLAUDE.md` if missing, with the marked block)
+  - `--write-guides append` (appends the marked block into existing files)
+  - `--write-guides update` (updates the marked block if it already exists)
+
+If the user declines, do not create any files; continue with read-only guidance.
+
 ## ID prefix derivation
 
-- Source of truth: `config/profile.env` -> `PROJECT_NAME`.
+- Preferred source of truth: `_kano/backlog/_config/config.json` -> `project.name` / `project.prefix`.
+- Legacy fallback: `config/profile.env` -> `PROJECT_NAME`.
 - Derivation:
   - Split `PROJECT_NAME` on non-alphanumeric separators and camel-case boundaries.
   - Take the first letter of each segment.
@@ -106,6 +126,7 @@ If the backlog structure is missing, propose creation and wait for user approval
 
 Backlog scripts:
 - `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold
+- `scripts/backlog/init_project.py`: first-run bootstrap (scaffold + config + dashboards + optional guide templates)
 - `scripts/backlog/create_item.py`: create a new item with ID + bucket (Epic can also create an index file)
 - `scripts/backlog/update_state.py`: update `state` + `updated` and append Worklog
 - `scripts/backlog/validate_ready.py`: check Ready gate sections

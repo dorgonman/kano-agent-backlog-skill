@@ -88,4 +88,11 @@ Logging scripts read defaults from `_kano/backlog/_config/config.json`:
 }
 ```
 
+Verbosity behavior:
+- `debug`: log all tool invocations
+- `info`: log successful + failed invocations
+- `warn` / `warning`: log only warnings/errors (currently: failures)
+- `error`: log only failures
+- `off` / `none` / `disabled`: disable audit logging
+
 Precedence: environment overrides > config defaults.

@@ -19,11 +19,14 @@ The `references/` folder is intentionally split into multiple small files so an 
 
 Backlog scripts:
 - `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold (folders + `_meta/indexes.md` + backlog `README.md`)
+- `scripts/backlog/init_project.py`: first-run bootstrap (scaffold + baseline config + dashboards + optional agent guides)
 - `scripts/backlog/create_item.py`: create a new item from template (ID + bucket + optional Epic index)
 - `scripts/backlog/update_state.py`: update `state` + `updated` and append Worklog
 - `scripts/backlog/validate_ready.py`: check Ready gate sections
 - `scripts/backlog/generate_view.py`: generate plain Markdown views
 - `scripts/backlog/refresh_dashboards.py`: rebuild SQLite index (optional) and refresh standard dashboards
+- `scripts/backlog/generate_tag_view.py`: generate a Markdown view for items by tag (DBIndex or file scan)
+- `scripts/backlog/show_version.py`: show skill version/build info (VERSION/CHANGELOG pointers)
 - `scripts/backlog/generate_epic_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
 - `scripts/backlog/seed_demo.py`: seed demo Epic/Feature/UserStory/Task/Bug items (tagged `demo-seed`) and plain Markdown views
 - `scripts/backlog/test_scripts.py`: smoke tests for the backlog scripts
@@ -59,5 +62,14 @@ In the demo host repo, the backlog lives under `_kano/backlog/`:
 - Decisions/ADRs: `_kano/backlog/decisions/**`
 - Views: `_kano/backlog/views/**`
 - Tools: `_kano/backlog/tools/**`
+
+## Versioning
+
+- Versioning policy: `VERSIONING.md` (Git tags `vX.Y.Z`)
+
+## Templates (optional)
+
+- `templates/AGENTS.block.md`: snippet for Codex-style agent instructions (append/update into repo-root `AGENTS.md`)
+- `templates/CLAUDE.block.md`: snippet for Claude-style instructions (append/update into repo-root `CLAUDE.md`)
 
 
