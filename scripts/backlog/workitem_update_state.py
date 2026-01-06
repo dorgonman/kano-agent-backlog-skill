@@ -20,6 +20,7 @@ COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
 if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
 from config_loader import get_config_value, load_config_with_defaults, validate_config  # noqa: E402
+from product_args import add_product_arguments, get_product_and_sandbox_flags  # noqa: E402
 
 
 def allowed_roots_for_repo(repo_root: Path) -> List[Path]:
@@ -108,6 +109,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable automatic dashboard refresh for this invocation.",
     )
+    add_product_arguments(parser)
     return parser.parse_args()
 
 

@@ -233,6 +233,7 @@ class IndexedItem:
     created: Optional[str]
     updated: Optional[str]
     source_path: str
+    product: str
     content_sha256: str
     frontmatter_json: str
     tags: List[str]
@@ -244,6 +245,37 @@ class IndexedItem:
 def normalize_path(repo_root: Path, path: Path) -> str:
     rel = path.resolve().relative_to(repo_root.resolve())
     return str(rel).replace("\\", "/")
+
+
+def extract_product_from_path(source_path: str, platform_root: Optional[Path] = None) -> str:
+    """Extract product name from a normalized source path.
+    
+    Path patterns:
+    - "products/kano-agent-backlog-skill/items/..." -> "kano-agent-backlog-skill"
+    - "sandboxes/test-skill/items/..." -> "test-skill"
+    - "items/..." (legacy) -> "kano-agent-backlog-skill" (default)
+    
+    Args:
+        source_path: Normalized path (forward slashes, relative).
+        platform_root: Not used, kept for compatibility.
+    
+    Returns:
+        Product name.
+    """
+    parts = source_path.split("/")
+    
+    # Check for products/ or sandboxes/ at start
+    if len(parts) >= 2:
+        if parts[0] == "products":
+            return parts[1]
+        elif parts[0] == "sandboxes":
+            return parts[1]
+    
+    # Legacy: items at root level
+    if len(parts) > 0 and parts[0] in ("items", "decisions", "views"):
+        return "kano-agent-backlog-skill"
+    
+    return "kano-agent-backlog-skill"
 
 
 def extract_item(
@@ -306,6 +338,7 @@ def extract_item(
 
     worklog_entries = parse_worklog_entries(lines)
     source_path = normalize_path(repo_root, path)
+    product = extract_product_from_path(source_path)
     frontmatter_json = json.dumps(fm, ensure_ascii=False, sort_keys=True)
 
     return IndexedItem(
@@ -321,6 +354,7 @@ def extract_item(
         created=str(created).strip() if created is not None else None,
         updated=str(updated).strip() if updated is not None else None,
         source_path=source_path,
+        product=product,
         content_sha256=sha256_text(content),
         frontmatter_json=frontmatter_json,
         tags=tags,
@@ -356,11 +390,11 @@ def upsert_item(conn: sqlite3.Connection, item: IndexedItem, known_ids: Optional
     conn.execute(
         """
         INSERT INTO items(
-          id, type, title, state, priority, parent_id, area, iteration, owner,
+          id, product, type, title, state, priority, parent_id, area, iteration, owner,
           created, updated, source_path, content_sha256, frontmatter_json
         )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(product, id) DO UPDATE SET
           type=excluded.type,
           title=excluded.title,
           state=excluded.state,
@@ -377,6 +411,7 @@ def upsert_item(conn: sqlite3.Connection, item: IndexedItem, known_ids: Optional
         """,
         (
             item.item_id,
+            item.product,
             item.item_type,
             item.title,
             item.state,

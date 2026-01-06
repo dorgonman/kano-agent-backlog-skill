@@ -11,6 +11,11 @@ if str(LOGGING_DIR) not in sys.path:
     sys.path.insert(0, str(LOGGING_DIR))
 from audit_runner import run_with_audit  # noqa: E402
 
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from product_args import add_product_arguments  # noqa: E402
+
 
 def allowed_roots_for_repo(repo_root: Path) -> List[Path]:
     return [
@@ -48,6 +53,7 @@ READY_SECTIONS = [
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate Ready gate sections for a backlog item.")
     parser.add_argument("--item", required=True, help="Path to backlog item markdown file.")
+    add_product_arguments(parser)
     return parser.parse_args()
 
 

@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 
 -- Backlog items (Epic/Feature/UserStory/Task/Bug, plus any process-defined types).
 CREATE TABLE IF NOT EXISTS items (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
+  product TEXT NOT NULL,
   type TEXT NOT NULL,
   title TEXT NOT NULL,
   state TEXT,
@@ -32,13 +33,17 @@ CREATE TABLE IF NOT EXISTS items (
   source_path TEXT NOT NULL,
   content_sha256 TEXT,
   frontmatter_json TEXT NOT NULL,
+  PRIMARY KEY(product, id),
+  UNIQUE(source_path),
   FOREIGN KEY(parent_id) REFERENCES items(id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_items_source_path ON items(source_path);
+CREATE INDEX IF NOT EXISTS idx_items_product ON items(product);
 CREATE INDEX IF NOT EXISTS idx_items_parent_id ON items(parent_id);
 CREATE INDEX IF NOT EXISTS idx_items_state ON items(state);
 CREATE INDEX IF NOT EXISTS idx_items_type ON items(type);
+CREATE INDEX IF NOT EXISTS idx_items_product_id ON items(product, id);
 
 -- Tags: normalized for simple filtering/grouping.
 CREATE TABLE IF NOT EXISTS item_tags (

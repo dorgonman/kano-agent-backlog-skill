@@ -25,6 +25,7 @@ from config_loader import (  # noqa: E402
     resolve_allowed_root,
     validate_config,
 )
+from product_args import add_product_arguments  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,6 +66,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print commands without executing.",
     )
+    add_product_arguments(parser)
     return parser.parse_args()
 
 

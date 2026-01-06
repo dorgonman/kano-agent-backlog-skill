@@ -27,6 +27,7 @@ from config_loader import (  # noqa: E402
     resolve_allowed_root,
     validate_config,
 )
+from product_args import add_product_arguments  # noqa: E402
 
 
 MARKER_START = "<!-- kano-agent-backlog-skill:start -->"
@@ -93,6 +94,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print actions without writing files.",
     )
+    add_product_arguments(parser)
     return parser.parse_args()
 
 

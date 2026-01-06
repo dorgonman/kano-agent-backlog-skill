@@ -5,7 +5,7 @@ import argparse
 import sys
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 sys.dont_write_bytecode = True
 
@@ -17,26 +17,33 @@ from audit_runner import run_with_audit  # noqa: E402
 COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
 if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
-from config_loader import default_config, allowed_roots_for_repo, resolve_allowed_root  # noqa: E402
-import context  # noqa: E402
+from config_loader import default_config  # noqa: E402
+from context import (  # noqa: E402
+    find_repo_root,
+    find_platform_root,
+    resolve_product_name,
+    get_product_root,
+    get_sandbox_root_or_none,
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Initialize backlog scaffold under a permitted root."
+        description="Initialize backlog scaffold under a product in the multi-product platform.",
+        epilog="Example: python bootstrap_init_backlog.py --product test-skill --agent copilot"
     )
     parser.add_argument(
         "--product",
-        help="Product name to initialize (e.g. kano-agent-backlog-skill).",
+        help="Product name to initialize (e.g. kano-agent-backlog-skill). Defaults to BACKLOG_PRODUCT env or defaults.json.",
     )
     parser.add_argument(
         "--sandbox",
         action="store_true",
-        help="Target the sandbox environment for the product.",
+        help="Target the sandbox environment for the product (creates under _kano/backlog/sandboxes/<product>).",
     )
     parser.add_argument(
-        "--backlog-root",
-        help="Explicit backlog root path (overrides product logic).",
+        "--agent",
+        help="Agent identifier for audit logging (e.g. copilot, cursor).",
     )
     parser.add_argument(
         "--force",
@@ -49,12 +56,6 @@ def parse_args() -> argparse.Namespace:
         help="Print actions without writing files.",
     )
     return parser.parse_args()
-
-
-def ensure_under_allowed(path: Path, allowed_roots: List[Path], label: str) -> None:
-    if resolve_allowed_root(path, allowed_roots) is None:
-        allowed = " or ".join(str(root) for root in allowed_roots)
-        raise SystemExit(f"{label} must be under {allowed}: {path}")
 
 
 def write_file(path: Path, content: str, force: bool, dry_run: bool) -> None:
@@ -77,30 +78,49 @@ def make_dir(path: Path, dry_run: bool) -> None:
 
 def main() -> int:
     args = parse_args()
-    repo_root = Path.cwd().resolve()
     
-    # Resolve Backlog Root
-    if args.backlog_root:
-        backlog_root = Path(args.backlog_root)
-        if not backlog_root.is_absolute():
-            backlog_root = (repo_root / backlog_root).resolve()
-    else:
-        product_name = context.resolve_product(args.product, repo_root=repo_root)
-        print(f"Targeting product: {product_name} (Sandbox: {args.sandbox})")
-        backlog_root = context.get_product_root(
-            product_name, is_sandbox=args.sandbox, repo_root=repo_root
-        )
-
-    allowed_roots = allowed_roots_for_repo(repo_root)
-    # Ensure our new product paths are allowed. 
-    # allowed_roots_for_repo likely returns _kano/backlog, which covers products/
-    ensure_under_allowed(backlog_root, allowed_roots, "backlog-root")
-
-    print(f"Initializing backlog at: {backlog_root}")
+    try:
+        # Discover platform root and resolve product name
+        repo_root = find_repo_root()
+        platform_root = find_platform_root(repo_root)
+        product_name = resolve_product_name(args.product)
+        
+        print(f"Repository root: {repo_root}")
+        print(f"Platform root: {platform_root}")
+        print(f"Target product: {product_name}")
+        print(f"Target sandbox: {args.sandbox}")
+        
+        # Resolve backlog root (product or sandbox)
+        if args.sandbox:
+            try:
+                backlog_root = get_sandbox_root_or_none(product_name, platform_root) or (platform_root / "sandboxes" / product_name)
+            except FileNotFoundError:
+                backlog_root = platform_root / "sandboxes" / product_name
+        else:
+            try:
+                backlog_root = get_product_root(product_name, platform_root)
+            except FileNotFoundError:
+                backlog_root = platform_root / "products" / product_name
+        
+        print(f"Initializing backlog at: {backlog_root}")
+        
+        # Ensure path is under platform root (safety check)
+        if not str(backlog_root).startswith(str(platform_root)):
+            raise SystemExit(f"backlog_root must be under {platform_root}: {backlog_root}")
+        
+        # Check if already initialized
+        if backlog_root.exists() and not args.force:
+            config_file = backlog_root / "_config" / "config.json"
+            if config_file.exists():
+                print(f"Backlog already initialized at {backlog_root}. Use --force to overwrite.")
+                return 1
+    
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
     dirs = [
         backlog_root / "_config",
-        backlog_root / "_index",
         backlog_root / "_meta",
         backlog_root / "decisions",
         backlog_root / "items" / "epics",
@@ -109,7 +129,6 @@ def main() -> int:
         backlog_root / "items" / "tasks",
         backlog_root / "items" / "bugs",
         backlog_root / "views",
-        backlog_root / "tools",
     ]
     for path in dirs:
         make_dir(path, args.dry_run)
@@ -149,16 +168,17 @@ def main() -> int:
     write_file(index_path, index_content, args.force, args.dry_run)
 
     config_path = backlog_root / "_config" / "config.json"
-    baseline = {"_comment": f"Baseline config for {backlog_root.name}."}
     
-    # We load standard defaults, but we should override project name if we know it
-    defaults = default_config()
-    defaults["project"]["name"] = args.product or backlog_root.name
-    # Sandbox root should perhaps be relative or point to the matching sandbox?
-    # But context handles that. The config might want to know where its sandbox is.
-    # defaults["sandbox"]["root"] = ... let's leave default for now or fix it.
+    # Load baseline defaults and customize for this product
+    baseline = default_config()
+    baseline["project"]["name"] = product_name
     
-    baseline.update(defaults)
+    # Optionally derive prefix from product name (simple heuristic)
+    # e.g., "kano-agent-backlog-skill" -> "KABSD"
+    if "prefix" not in baseline.get("project", {}):
+        prefix = _derive_prefix(product_name)
+        baseline["project"]["prefix"] = prefix
+    
     config_content = json.dumps(baseline, indent=2, ensure_ascii=True) + "\n"
     write_file(config_path, config_content, args.force, args.dry_run)
 
@@ -203,19 +223,22 @@ def main() -> int:
         ]
     )
     write_file(plain_dashboard_path, plain_dashboard_content, args.force, args.dry_run)
-
-    tools_readme_path = backlog_root / "tools" / "README.md"
-    tools_readme_content = "\n".join(
-        [
-            "# Backlog Tools (project-specific)",
-            "",
-            "Keep project-only scripts here (e.g., iteration views, last-N-days focus views).",
-            "Generic workflows should live in the skill under `skills/kano-agent-backlog-skill/scripts/`.",
-            "",
-        ]
-    )
-    write_file(tools_readme_path, tools_readme_content, args.force, args.dry_run)
+    
+    print(f"\n✓ Backlog initialized successfully at {backlog_root}")
+    if args.agent:
+        print(f"  Run this to refresh dashboards: python ... view_refresh_dashboards.py --product {product_name} --agent {args.agent}")
+    
     return 0
+
+
+def _derive_prefix(product_name: str) -> str:
+    """
+    Simple heuristic to derive a prefix from product name.
+    E.g., "kano-agent-backlog-skill" -> "KABSD"
+    """
+    parts = product_name.split("-")
+    prefix = "".join(p[0].upper() for p in parts if p)
+    return prefix or "PRJ"
 
 
 if __name__ == "__main__":

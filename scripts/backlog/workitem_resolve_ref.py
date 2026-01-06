@@ -7,6 +7,11 @@ from dataclasses import asdict
 from lib.index import BacklogIndex, BacklogItem
 from lib.resolver import resolve_ref
 
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from product_args import add_product_arguments
+
 def print_item(item: BacklogItem, fmt: str):
     if fmt == "json":
         d = asdict(item)
@@ -33,6 +38,7 @@ def main():
     parser.add_argument("--backlog-root", default="_kano/backlog", help="Path to backlog root")
     parser.add_argument("--interactive", action="store_true", help="Prompt for selection if ambiguous")
     parser.add_argument("--format", choices=["text", "json", "path", "uid"], default="text", help="Output format")
+    add_product_arguments(parser)
     args = parser.parse_args()
 
     root = Path(args.backlog_root)

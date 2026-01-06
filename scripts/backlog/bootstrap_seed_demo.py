@@ -16,6 +16,7 @@ COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
 if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
 from config_loader import allowed_roots_for_repo, resolve_allowed_root  # noqa: E402
+from product_args import add_product_arguments  # noqa: E402
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -53,6 +54,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print actions without creating files.",
     )
+    add_product_arguments(parser)
     return parser.parse_args()
 
 

@@ -15,6 +15,11 @@ if str(LOGGING_DIR) not in sys.path:
     sys.path.insert(0, str(LOGGING_DIR))
 from audit_runner import run_with_audit
 
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from product_args import add_product_arguments
+
 from lib.utils import parse_frontmatter
 import datetime
 
@@ -116,6 +121,7 @@ def main() -> int:
     parser.add_argument("--backlog-root", default="_kano/backlog", help="Backlog root directory.")
     parser.add_argument("--force", action="store_true", help="Force rebuild all items (deletes DB).")
     parser.add_argument("--agent", default="system", help="Agent name (unused but keeps standard).")
+    add_product_arguments(parser)
     args = parser.parse_args()
     
     repo_root = Path.cwd().resolve()

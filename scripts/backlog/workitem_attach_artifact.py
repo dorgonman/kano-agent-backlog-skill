@@ -13,6 +13,11 @@ if str(LOGGING_DIR) not in sys.path:
     sys.path.insert(0, str(LOGGING_DIR))
 from audit_runner import run_with_audit
 
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from product_args import add_product_arguments  # noqa: E402
+
 from lib.index import BacklogIndex
 from lib.resolver import resolve_ref
 
@@ -23,6 +28,7 @@ def main() -> int:
     parser.add_argument("--rename", help="Optional new filename for the artifact.")
     parser.add_argument("--agent", required=True, help="Agent name for worklog.")
     parser.add_argument("--message", help="Optional message for worklog.")
+    add_product_arguments(parser)
     
     args = parser.parse_args()
     

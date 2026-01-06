@@ -1,5 +1,5 @@
 ---
-name: project-backlog
+name: kano-agent-backlog-skill
 description: Local-first backlog workflow for this repo. Use when planning work, creating or updating Epics/Features/UserStories/Tasks/Bugs, writing ADRs, or enforcing the Ready gate before code changes.
 metadata:
   short-description: Local backlog system
@@ -143,8 +143,16 @@ Backlog scripts:
 - `scripts/backlog/workitem_update_state.py`: update `state` + `updated` and append Worklog
 - `scripts/backlog/workitem_validate_ready.py`: check Ready gate sections
 - `scripts/backlog/view_generate.py`: generate plain Markdown views
+- `scripts/backlog/view_refresh_dashboards.py`: rebuild index (optional) and refresh standard dashboards
+- `scripts/backlog/view_generate_demo.py`: generate DBIndex/NoDBIndex demo views
+- `scripts/backlog/view_generate_tag.py`: generate tag-filtered views
 - `scripts/backlog/workitem_generate_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
+- `scripts/backlog/workitem_resolve_ref.py`: resolve id/uid references (with disambiguation)
+- `scripts/backlog/workitem_collision_report.py`: report duplicate display IDs
+- `scripts/backlog/workitem_attach_artifact.py`: copy artifacts and link them to items
+- `scripts/backlog/migration_add_uid.py`: add uid fields to existing items
 - `scripts/backlog/bootstrap_seed_demo.py`: seed demo items and views
+- `scripts/backlog/version_show.py`: show skill version metadata
 - `scripts/backlog/tests_smoke.py`: smoke tests for the backlog scripts
 
 Filesystem scripts:

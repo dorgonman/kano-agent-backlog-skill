@@ -14,6 +14,11 @@ if str(LOGGING_DIR) not in sys.path:
     sys.path.insert(0, str(LOGGING_DIR))
 from audit_runner import run_with_audit  # noqa: E402
 
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from product_args import add_product_arguments  # noqa: E402
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Show kano-agent-backlog-skill version information.")
@@ -28,6 +33,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Agent identity running the script (required, used for auditability).",
     )
+    add_product_arguments(parser)
     return parser.parse_args()
 
 

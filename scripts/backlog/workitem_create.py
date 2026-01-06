@@ -21,6 +21,11 @@ if str(LOGGING_DIR) not in sys.path:
     sys.path.insert(0, str(LOGGING_DIR))
 from audit_runner import run_with_audit  # noqa: E402
 
+COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
+if str(COMMON_DIR) not in sys.path:
+    sys.path.insert(0, str(COMMON_DIR))
+from product_args import add_product_arguments, get_product_and_sandbox_flags  # noqa: E402
+
 
 TYPE_MAP = {
     "epic": ("Epic", "EPIC", "epics"),
@@ -84,6 +89,7 @@ def parse_args() -> argparse.Namespace:
             "Used for project.name/prefix defaults."
         ),
     )
+    add_product_arguments(parser)
     parser.add_argument("--project-name", help="Project name override.")
     parser.add_argument("--prefix", help="ID prefix override.")
     parser.add_argument(

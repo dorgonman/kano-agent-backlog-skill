@@ -7,6 +7,13 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from context import (
+    find_repo_root,
+    find_platform_root,
+    resolve_product_name,
+    get_config_file,
+)
+
 
 DEFAULT_CONFIG_PATH = "_kano/backlog/_config/config.json"
 DEFAULT_CONFIG = {
@@ -38,13 +45,23 @@ DEFAULT_CONFIG = {
 
 
 def allowed_roots_for_repo(repo_root: Path) -> List[Path]:
+    """Return list of allowed config root directories for the repository.
+    
+    In multi-product architecture, configs can live under:
+    - Platform root: _kano/backlog/
+    - Product roots: _kano/backlog/products/<product>/
+    - Sandboxes: _kano/backlog/sandboxes/<product>/
+    """
+    platform_root = find_platform_root(repo_root)
     return [
-        (repo_root / "_kano" / "backlog").resolve(),
-        (repo_root / "_kano" / "backlog_sandbox").resolve(),
+        platform_root.resolve(),
+        (platform_root / "products").resolve(),
+        (platform_root / "sandboxes").resolve(),
     ]
 
 
 def resolve_allowed_root(path: Path, allowed_roots: List[Path]) -> Optional[Path]:
+    """Return the allowed root under which the path is located, or None if not under any."""
     resolved = path.resolve()
     for root in allowed_roots:
         try:
@@ -56,26 +73,88 @@ def resolve_allowed_root(path: Path, allowed_roots: List[Path]) -> Optional[Path
 
 
 def resolve_config_path(
-    repo_root: Path,
+    repo_root: Optional[Path] = None,
     config_path: Optional[str] = None,
+    product_name: Optional[str] = None,
 ) -> Path:
-    raw = config_path or os.getenv("KANO_BACKLOG_CONFIG_PATH") or DEFAULT_CONFIG_PATH
-    path = Path(raw)
-    if not path.is_absolute():
-        path = (repo_root / path).resolve()
-    allowed_roots = allowed_roots_for_repo(repo_root)
-    if resolve_allowed_root(path, allowed_roots) is None:
-        allowed = " or ".join(str(root) for root in allowed_roots)
-        raise SystemExit(f"Config path must be under {allowed}: {path}")
+    """Resolve config file path for a product.
+    
+    Priority:
+    1. Explicit config_path argument (if provided)
+    2. Environment variable KANO_BACKLOG_CONFIG_PATH
+    3. Product-specific config: <product_root>/_config/config.json
+    4. Legacy fallback: _kano/backlog/_config/config.json
+    
+    Args:
+        repo_root: Repository root (defaults to current working directory).
+        config_path: Explicit config path (relative to repo_root or absolute).
+        product_name: Product name (used for product-specific config path).
+    
+    Returns:
+        Absolute path to the config file.
+    
+    Raises:
+        SystemExit: If the resolved path is not under an allowed root.
+    """
+    root = repo_root or Path.cwd().resolve()
+    
+    # If explicit config_path provided, use it
+    if config_path:
+        path = Path(config_path)
+        if not path.is_absolute():
+            path = (root / path).resolve()
+        allowed_roots = allowed_roots_for_repo(root)
+        if resolve_allowed_root(path, allowed_roots) is None:
+            allowed = " or ".join(str(r) for r in allowed_roots)
+            raise SystemExit(f"Config path must be under {allowed}: {path}")
+        return path
+    
+    # If environment variable provided, use it
+    env_config = os.getenv("KANO_BACKLOG_CONFIG_PATH")
+    if env_config:
+        path = Path(env_config)
+        if not path.is_absolute():
+            path = (root / path).resolve()
+        allowed_roots = allowed_roots_for_repo(root)
+        if resolve_allowed_root(path, allowed_roots) is None:
+            allowed = " or ".join(str(r) for r in allowed_roots)
+            raise SystemExit(f"Config path must be under {allowed}: {path}")
+        return path
+    
+    # If product_name provided, try to get product-specific config
+    if product_name:
+        try:
+            return get_config_file(product_name=product_name, repo_root=root)
+        except FileNotFoundError:
+            # Product root doesn't exist; fall back to legacy path
+            pass
+    
+    # Legacy fallback: platform-level config
+    platform_root = find_platform_root(root)
+    path = (platform_root / "_config" / "config.json").resolve()
     return path
 
 
 def load_config(
     repo_root: Optional[Path] = None,
     config_path: Optional[str] = None,
+    product_name: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Load configuration for a product.
+    
+    Args:
+        repo_root: Repository root (defaults to current working directory).
+        config_path: Explicit config file path (relative to repo_root or absolute).
+        product_name: Product name (used to locate product-specific config).
+    
+    Returns:
+        Configuration dictionary (empty if file not found).
+    
+    Raises:
+        SystemExit: If config file is invalid JSON or not under allowed roots.
+    """
     root = repo_root or Path.cwd().resolve()
-    path = resolve_config_path(root, config_path)
+    path = resolve_config_path(root, config_path, product_name)
     if not path.exists():
         return {}
     try:
@@ -105,9 +184,21 @@ def load_config_with_defaults(
     repo_root: Optional[Path] = None,
     config_path: Optional[str] = None,
     defaults: Optional[Dict[str, Any]] = None,
+    product_name: Optional[str] = None,
 ) -> Dict[str, Any]:
+    """Load configuration with defaults.
+    
+    Args:
+        repo_root: Repository root (defaults to current working directory).
+        config_path: Explicit config file path (relative to repo_root or absolute).
+        defaults: Default configuration (uses default_config() if not provided).
+        product_name: Product name (used to locate product-specific config).
+    
+    Returns:
+        Merged configuration (defaults + overrides).
+    """
     base = defaults if defaults is not None else default_config()
-    overrides = load_config(repo_root=repo_root, config_path=config_path)
+    overrides = load_config(repo_root=repo_root, config_path=config_path, product_name=product_name)
     if not overrides:
         return base
     return merge_defaults(base, overrides)
