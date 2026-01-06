@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Render a Markdown view from the SQLite backlog index (debug/reporting). "
-            "For canonical dashboards, prefer `scripts/backlog/generate_view.py --source auto`."
+            "For canonical dashboards, prefer `scripts/backlog/view_generate.py --source auto`."
         )
     )
     parser.add_argument(

@@ -121,7 +121,7 @@ def main() -> int:
         (
             "KABSD-USR-0004",
             lambda: check_exists(
-                skill_root / "scripts" / "backlog" / "init_backlog.py",
+                skill_root / "scripts" / "backlog" / "bootstrap_init_backlog.py",
                 "Bootstrap initializer",
             ),
         )
@@ -130,7 +130,7 @@ def main() -> int:
         (
             "KABSD-USR-0005",
             lambda: check_exists(
-                skill_root / "scripts" / "backlog" / "seed_demo.py",
+                skill_root / "scripts" / "backlog" / "bootstrap_seed_demo.py",
                 "Demo seed script",
             ),
         )

@@ -4,7 +4,7 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
-backlog_entry = Path(__file__).resolve().parent / "backlog" / "generate_view.py"
+backlog_entry = Path(__file__).resolve().parent / "backlog" / "view_generate.py"
 if __name__ == "__main__" and backlog_entry.exists():
     runpy.run_path(str(backlog_entry), run_name="__main__")
     raise SystemExit(0)

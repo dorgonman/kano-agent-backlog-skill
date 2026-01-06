@@ -18,29 +18,43 @@ The `references/` folder is intentionally split into multiple small files so an 
 ## Scripts (optional automation)
 
 Backlog scripts:
-- `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold (folders + `_meta/indexes.md` + backlog `README.md`)
-- `scripts/backlog/init_project.py`: first-run bootstrap (scaffold + baseline config + dashboards + optional agent guides)
-- `scripts/backlog/create_item.py`: create a new item from template (ID + bucket + optional Epic index)
-- `scripts/backlog/update_state.py`: update `state` + `updated` and append Worklog
-- `scripts/backlog/validate_ready.py`: check Ready gate sections
-- `scripts/backlog/generate_view.py`: generate plain Markdown views
-- `scripts/backlog/refresh_dashboards.py`: rebuild SQLite index (optional) and refresh standard dashboards
-- `scripts/backlog/generate_tag_view.py`: generate a Markdown view for items by tag (DBIndex or file scan)
-- `scripts/backlog/show_version.py`: show skill version/build info (VERSION/CHANGELOG pointers)
-- `scripts/backlog/generate_epic_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
-- `scripts/backlog/seed_demo.py`: seed demo Epic/Feature/UserStory/Task/Bug items (tagged `demo-seed`) and plain Markdown views
-- `scripts/backlog/test_scripts.py`: smoke tests for the backlog scripts
+- `scripts/backlog/bootstrap_init_backlog.py`: initialize `_kano/backlog` scaffold (folders + `_meta/indexes.md` + backlog `README.md`)
+- `scripts/backlog/bootstrap_init_project.py`: first-run bootstrap (scaffold + baseline config + dashboards + optional agent guides)
+- `scripts/backlog/workitem_create.py`: create a backlog work item from template (ID + bucket + optional Epic index)
+- `scripts/backlog/workitem_update_state.py`: update `state` + `updated` and append Worklog
+- `scripts/backlog/workitem_validate_ready.py`: check Ready gate sections
+- `scripts/backlog/view_generate.py`: generate plain Markdown views
+- `scripts/backlog/view_refresh_dashboards.py`: rebuild SQLite index (optional) and refresh standard dashboards
+- `scripts/backlog/view_generate_tag.py`: generate a Markdown view for items by tag (DBIndex or file scan)
+- `scripts/backlog/view_generate_demo.py`: generate DBIndex vs NoDBIndex demo views
+- `scripts/backlog/version_show.py`: show skill version/build info (VERSION/CHANGELOG pointers)
+- `scripts/backlog/workitem_generate_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
+- `scripts/backlog/bootstrap_seed_demo.py`: seed demo Epic/Feature/UserStory/Task/Bug items (tagged `demo-seed`) and plain Markdown views
+- `scripts/backlog/tests_smoke.py`: smoke tests for the backlog scripts
+
+Grouped CLI wrappers (optional aliases, same behavior):
+- `scripts/backlog/cli/workitem_create.py` -> `scripts/backlog/workitem_create.py`
+- `scripts/backlog/cli/workitem_update_state.py` -> `scripts/backlog/workitem_update_state.py`
+- `scripts/backlog/cli/workitem_validate_ready.py` -> `scripts/backlog/workitem_validate_ready.py`
+- `scripts/backlog/cli/workitem_generate_index.py` -> `scripts/backlog/workitem_generate_index.py`
+- `scripts/backlog/cli/workitem_resolve_ref.py` -> `scripts/backlog/workitem_resolve_ref.py`
+- `scripts/backlog/cli/view_generate.py` -> `scripts/backlog/view_generate.py`
+- `scripts/backlog/cli/view_refresh_dashboards.py` -> `scripts/backlog/view_refresh_dashboards.py`
+- `scripts/backlog/cli/view_generate_tag.py` -> `scripts/backlog/view_generate_tag.py`
+- `scripts/backlog/cli/view_generate_demo.py` -> `scripts/backlog/view_generate_demo.py`
+- `scripts/backlog/cli/bootstrap_init_backlog.py` -> `scripts/backlog/bootstrap_init_backlog.py`
+- `scripts/backlog/cli/bootstrap_init_project.py` -> `scripts/backlog/bootstrap_init_project.py`
 
 Indexing scripts:
 - `scripts/indexing/build_sqlite_index.py`: build a rebuildable SQLite index for file-first backlog items
 - `scripts/indexing/query_sqlite_index.py`: read-only query helper for the SQLite index (presets + safe --sql)
-- `scripts/indexing/render_db_view.py`: render debug/report views from SQLite (canonical dashboards use `scripts/backlog/generate_view.py --source auto`)
+- `scripts/indexing/render_db_view.py`: render debug/report views from SQLite (canonical dashboards use `scripts/backlog/view_generate.py --source auto`)
 
 Filesystem scripts:
-- `scripts/fs/cp_file.py`: copy a file inside the repo
-- `scripts/fs/mv_file.py`: move a file inside the repo
-- `scripts/fs/rm_file.py`: delete a file inside the repo
-- `scripts/fs/trash_item.py`: move to trash then optionally delete
+- `scripts/fs/cp_file.py`: copy a file inside the repo (requires `--agent`; auto-refresh dashboards by default)
+- `scripts/fs/mv_file.py`: move a file inside the repo (requires `--agent`; auto-refresh dashboards by default)
+- `scripts/fs/rm_file.py`: delete a file inside the repo (requires `--agent`; auto-refresh dashboards by default)
+- `scripts/fs/trash_item.py`: move to trash then optionally delete (requires `--agent`; auto-refresh dashboards by default)
 
 Logging scripts:
 - `scripts/logging/audit_logger.py`: JSONL audit log writer + redaction
@@ -50,6 +64,10 @@ Logging scripts:
 Shared helpers:
 - `scripts/common/config_loader.py`: load config from `_kano/backlog/_config/config.json`
 - `scripts/common/validate_config.py`: validate config file structure and types
+
+Config keys used by scripts:
+- `project.name`, `project.prefix`: defaults for ID prefix derivation
+- `views.auto_refresh`: auto-run `scripts/backlog/view_refresh_dashboards.py` after item changes (default: true)
 
 Test scripts:
 - `scripts/tests/validate_userstories.py`: validate user story expectations

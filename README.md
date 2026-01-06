@@ -54,12 +54,12 @@ English version: `README.en.md`
 ## Self-contained bootstrap (init + seed)
 
 ```bash
-python scripts/backlog/init_backlog.py --backlog-root _kano/backlog
-python scripts/backlog/seed_demo.py --backlog-root _kano/backlog --agent <agent-name>
+python scripts/backlog/bootstrap_init_backlog.py --backlog-root _kano/backlog
+python scripts/backlog/bootstrap_seed_demo.py --backlog-root _kano/backlog --agent <agent-name>
 ```
 
-- `init_backlog.py` creates the `_kano/backlog/` scaffold and `_kano/backlog/_meta/indexes.md`.
-- `seed_demo.py` creates demo Epic/Feature/UserStory/Task/Bug items tagged `demo-seed`, plus `Dashboard_PlainMarkdown_*.md` views (unless `--skip-views`).
+- `bootstrap_init_backlog.py` creates the `_kano/backlog/` scaffold and `_kano/backlog/_meta/indexes.md`.
+- `bootstrap_seed_demo.py` creates demo Epic/Feature/UserStory/Task/Bug items tagged `demo-seed`, plus `Dashboard_PlainMarkdown_*.md` views (unless `--skip-views`).
 - Use `--dry-run` to preview and `--force` to overwrite existing baseline files or allow reseeding.
 
 ## 建議的 backlog 結構（在你的專案內）

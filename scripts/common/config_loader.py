@@ -14,6 +14,9 @@ DEFAULT_CONFIG = {
         "name": None,
         "prefix": None,
     },
+    "views": {
+        "auto_refresh": True,
+    },
     "log": {
         "verbosity": "info",
         "debug": False,
@@ -140,6 +143,14 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
             trimmed = prefix.strip()
             if trimmed and not trimmed.isalnum():
                 errors.append("project.prefix must be alphanumeric (A-Z0-9).")
+
+    views_cfg = config.get("views", {})
+    if views_cfg is not None and not isinstance(views_cfg, dict):
+        errors.append("views must be an object.")
+    else:
+        auto_refresh = views_cfg.get("auto_refresh") if isinstance(views_cfg, dict) else None
+        if auto_refresh is not None and not isinstance(auto_refresh, bool):
+            errors.append("views.auto_refresh must be a boolean.")
 
     log_cfg = config.get("log", {})
     if log_cfg is not None and not isinstance(log_cfg, dict):

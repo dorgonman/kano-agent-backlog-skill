@@ -5,7 +5,7 @@ This skill uses **Git tags** as the source of truth for released versions: `vX.Y
 ## Where to check the current version
 
 - File: `VERSION` (the intended version for the next release tag)
-- Command: `python scripts/backlog/show_version.py --agent <agent-name>`
+- Command: `python scripts/backlog/version_show.py --agent <agent-name>`
 - Release notes: `CHANGELOG.md`
 
 ## Pre-1.0 policy
@@ -38,6 +38,6 @@ Non-exhaustive examples:
 
 - Docs reflect current behavior (`README*`, `REFERENCE.md`, `references/*`)
 - Canonical scripts run end-to-end:
-  - `scripts/backlog/refresh_dashboards.py`
-  - `scripts/backlog/update_state.py`
+  - `scripts/backlog/view_refresh_dashboards.py`
+  - `scripts/backlog/workitem_update_state.py`
 - Demo views are regenerated

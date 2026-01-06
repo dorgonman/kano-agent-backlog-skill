@@ -10,10 +10,13 @@ This project uses Git tags as releases: `vX.Y.Z`.
 - Optional SQLite index layer (rebuildable) to accelerate reads and view generation.
 - DBIndex vs NoDBIndex demo dashboards under `_kano/backlog/views/_demo/`.
 - Demo tool for recent/iteration focus views (`_kano/backlog/tools/generate_focus_view.py`).
+- First-run bootstrap (`scripts/backlog/bootstrap_init_project.py`) + templates to enable the backlog system in a repo.
+- `views.auto_refresh` config flag (default: true) to keep dashboards up to date automatically.
 
 ### Changed
 - Unified generated dashboards to prefer SQLite when enabled/available and fall back to file scan.
-- Kept `scripts/backlog/generate_demo_views.py` self-contained; demo repo tool is a thin wrapper.
+- Kept `scripts/backlog/view_generate_demo.py` self-contained; demo repo tool is a thin wrapper.
+- Mutating scripts auto-refresh dashboards by default; `scripts/fs/*` now also require `--agent` for auditability.
 
 ### Fixed
 - `query_sqlite_index.py --sql` validation (SELECT/WITH detection).

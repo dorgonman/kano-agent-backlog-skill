@@ -4,7 +4,7 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
-backlog_entry = Path(__file__).resolve().parent / "backlog" / "test_scripts.py"
+backlog_entry = Path(__file__).resolve().parent / "backlog" / "tests_smoke.py"
 if __name__ == "__main__" and backlog_entry.exists():
     runpy.run_path(str(backlog_entry), run_name="__main__")
     raise SystemExit(0)
@@ -88,10 +88,10 @@ def main() -> int:
     python = sys.executable
     agent_name = "test-agent"
 
-    create_item = script_dir / "create_item.py"
-    update_state = script_dir / "update_state.py"
-    validate_ready = script_dir / "validate_ready.py"
-    generate_view = script_dir / "generate_view.py"
+    create_item = script_dir / "workitem_create.py"
+    update_state = script_dir / "workitem_update_state.py"
+    validate_ready = script_dir / "workitem_validate_ready.py"
+    generate_view = script_dir / "view_generate.py"
 
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     if args.temp_root:

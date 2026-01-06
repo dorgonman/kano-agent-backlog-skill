@@ -27,6 +27,78 @@ class BacklogIndex:
         self._scan()
 
     def _scan(self):
+        # 1. Try loading from SQLite
+        db_path = self.root / "_index" / "backlog.sqlite3"
+        if db_path.exists():
+            try:
+                self._load_from_db(db_path)
+                return
+            except Exception as e:
+                print(f"Warning: DB load failed, falling back to file scan: {e}")
+        
+        # 2. Fallback to File Scan
+        self._scan_files()
+
+    def _load_from_db(self, db_path: Path):
+        import sqlite3
+        import json
+        
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT uid, id, type, title, state, path, created, updated, frontmatter FROM items")
+            for row in cur.fetchall():
+                uid, did, type_, title, state, rel_path, created, updated, fm_json = row
+                
+                fm = {}
+                if fm_json:
+                    try:
+                        fm = json.loads(fm_json)
+                    except json.JSONDecodeError:
+                        pass
+                
+                # Reconstruct item
+                # Ensure path is absolute for tool consistency
+                full_path = self.root.parent.parent / rel_path # root is _kano/backlog, repo is parent.parent?
+                # Wait, rel_path in DB is relative to REPO ROOT.
+                # self.root is usually _kano/backlog.
+                # If index_db.py stores path relative to repo root (e.g. _kano/backlog/items/...).
+                # And self.root is e.g. D:/.../_kano/backlog
+                # Then we need to know repo root.
+                # Assuming standard layout: repo_root = self.root.parent.parent
+                
+                # Check if self.root is absolute. 
+                # Better: resolve relative to cwd? 
+                # index_db.py uses: rel_path = f.relative_to(repo_root).as_posix()
+                # Here we need to reconstruct full path.
+                
+                # Attempt to find repo root from self.root
+                # If self.root ends with _kano/backlog, walk up.
+                repo_root = self.root
+                if self.root.name == "backlog" and self.root.parent.name == "_kano":
+                    repo_root = self.root.parent.parent
+                
+                item_path = repo_root / rel_path
+                
+                uidshort = uid.replace("-", "")[:8] if uid else ""
+                
+                item = BacklogItem(
+                    uid=uid,
+                    id=did,
+                    uidshort=uidshort,
+                    type=type_,
+                    title=title,
+                    state=state,
+                    path=item_path,
+                    created=created,
+                    updated=updated,
+                    frontmatter=fm
+                )
+                self._add_to_index(item)
+        finally:
+            conn.close()
+
+    def _scan_files(self):
         items_dir = self.root / "items"
         if not items_dir.exists():
             return
@@ -38,11 +110,6 @@ class BacklogIndex:
                 
                 if not fm or 'id' not in fm:
                     continue
-                
-                # If uid missing, use empty string or generated logic (handled by migration script, not here)
-                # But for index, we only verify strictly complying items?
-                # Actually, during migration, items might NOT have proper uid yet.
-                # For resolve_ref, we expect uid to exist.
                 
                 uid = fm.get('uid', '')
                 uidshort = uid.replace("-", "")[:8] if uid else ""
@@ -59,25 +126,27 @@ class BacklogIndex:
                     updated=str(fm.get('updated', '')),
                     frontmatter=fm
                 )
-                
-                # Index by UID
-                if uid:
-                    self.items_by_uid[uid] = item
-                
-                # Index by UID Short
-                if uidshort:
-                    if uidshort not in self.items_by_uidshort:
-                        self.items_by_uidshort[uidshort] = []
-                    self.items_by_uidshort[uidshort].append(item)
-                    
-                # Index by Display ID
-                did = item.id
-                if did not in self.items_by_id:
-                    self.items_by_id[did] = []
-                self.items_by_id[did].append(item)
+                self._add_to_index(item)
                 
             except Exception as e:
                 print(f"Warning: Failed to index {f}: {e}")
+
+    def _add_to_index(self, item: BacklogItem):
+        # Index by UID
+        if item.uid:
+            self.items_by_uid[item.uid] = item
+        
+        # Index by UID Short
+        if item.uidshort:
+            if item.uidshort not in self.items_by_uidshort:
+                self.items_by_uidshort[item.uidshort] = []
+            self.items_by_uidshort[item.uidshort].append(item)
+            
+        # Index by Display ID
+        did = item.id
+        if did not in self.items_by_id:
+            self.items_by_id[did] = []
+        self.items_by_id[did].append(item)
 
     def get_by_uid(self, uid: str) -> Optional[BacklogItem]:
         return self.items_by_uid.get(uid)

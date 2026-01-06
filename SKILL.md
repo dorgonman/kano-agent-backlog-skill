@@ -45,12 +45,15 @@ Use this skill to:
   - **Forbidden (Placeholders)**: `auto`, `user`, `assistant`, `<AGENT_NAME>`, `$AGENT_NAME`.
 - File operations for backlog/skill artifacts must go through skill scripts
   (`scripts/backlog/*` or `scripts/fs/*`) so audit logs capture the action.
+  - Mutating `scripts/fs/*` operations also require `--agent` and will auto-refresh dashboards by default.
 - Skill scripts only operate on paths under `_kano/backlog/` or `_kano/backlog_sandbox/`;
   refuse other paths.
-- After modifying backlog items, refresh the dashboards immediately so the demo stays current:
-  - Recommended: `scripts/backlog/refresh_dashboards.py` (can refresh the SQLite index first, then regenerate views)
-  - Or: `scripts/backlog/generate_view.py --source auto` to regenerate individual views.
-- `update_state.py` auto-syncs parent states forward-only by default; use `--no-sync-parent`
+- Dashboard freshness:
+  - By default, mutating scripts (`workitem_create.py`, `workitem_update_state.py`, and `scripts/fs/*`) will auto-run
+    `scripts/backlog/view_refresh_dashboards.py` after they change files/items.
+  - Control this with `_kano/backlog/_config/config.json` -> `views.auto_refresh` (default: `true`).
+  - Per-invocation override: pass `--no-refresh` to skip.
+- `workitem_update_state.py` auto-syncs parent states forward-only by default; use `--no-sync-parent`
   for manual re-plans where parent state should stay put.
 - Add Obsidian `[[wikilink]]` references in the body (e.g., a `## Links` section) so Graph/backlinks work; frontmatter alone does not create graph edges.
 
@@ -60,7 +63,7 @@ When this skill is present but the backlog scaffold is missing (no `_kano/backlo
 
 1) Ask the user whether to enable the backlog system for this repo.
 2) If approved, run the initializer:
-   - `python scripts/backlog/init_project.py --agent <agent-name> --backlog-root _kano/backlog`
+   - `python scripts/backlog/bootstrap_init_project.py --agent <agent-name> --backlog-root _kano/backlog`
 
 What it does:
 - Creates `_kano/backlog/` scaffold (items/decisions/views + `_meta/indexes.md`)
@@ -125,15 +128,15 @@ If the backlog structure is missing, propose creation and wait for user approval
 ## Scripts (optional automation)
 
 Backlog scripts:
-- `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold
-- `scripts/backlog/init_project.py`: first-run bootstrap (scaffold + config + dashboards + optional guide templates)
-- `scripts/backlog/create_item.py`: create a new item with ID + bucket (Epic can also create an index file)
-- `scripts/backlog/update_state.py`: update `state` + `updated` and append Worklog
-- `scripts/backlog/validate_ready.py`: check Ready gate sections
-- `scripts/backlog/generate_view.py`: generate plain Markdown views
-- `scripts/backlog/generate_epic_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
-- `scripts/backlog/seed_demo.py`: seed demo items and views
-- `scripts/backlog/test_scripts.py`: smoke tests for the backlog scripts
+- `scripts/backlog/bootstrap_init_backlog.py`: initialize `_kano/backlog` scaffold
+- `scripts/backlog/bootstrap_init_project.py`: first-run bootstrap (scaffold + config + dashboards + optional guide templates)
+- `scripts/backlog/workitem_create.py`: create a new backlog work item with ID + bucket (Epic can also create an index file)
+- `scripts/backlog/workitem_update_state.py`: update `state` + `updated` and append Worklog
+- `scripts/backlog/workitem_validate_ready.py`: check Ready gate sections
+- `scripts/backlog/view_generate.py`: generate plain Markdown views
+- `scripts/backlog/workitem_generate_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
+- `scripts/backlog/bootstrap_seed_demo.py`: seed demo items and views
+- `scripts/backlog/tests_smoke.py`: smoke tests for the backlog scripts
 
 Filesystem scripts:
 - `scripts/fs/cp_file.py`: copy a file inside the repo
@@ -152,7 +155,7 @@ operations outside the script layer when working on backlog/skill artifacts.
 
 ## State update helper
 
-- Use `scripts/backlog/update_state.py` (or `_kano/backlog/tools/update_state.py` in the demo repo) to update state + append Worklog.
+- Use `scripts/backlog/workitem_update_state.py` (or `_kano/backlog/tools/update_state.py` in the demo repo) to update state + append Worklog.
 - Prefer `--action` for common transitions (`start`, `ready`, `review`, `done`, `block`, `drop`).
 - When moving to Ready, it validates required sections unless `--force` is set.
 

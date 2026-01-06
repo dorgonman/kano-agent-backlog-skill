@@ -81,7 +81,7 @@ File-first dashboards continue to work normally (Dataview or generated Markdown 
 
 Optional (planned): generate Markdown dashboards from DB queries to reduce dependence on Obsidian plugins.
 
-If you enable `index.enabled=true`, `scripts/backlog/generate_view.py --source auto` can use the SQLite index
+If you enable `index.enabled=true`, `scripts/backlog/view_generate.py --source auto` can use the SQLite index
 when present, and falls back to file scan when the DB is missing.
 
 ## DB-first is out of scope
