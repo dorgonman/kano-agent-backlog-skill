@@ -21,6 +21,7 @@ from context import (  # noqa: E402
     find_repo_root,
     find_platform_root,
     resolve_product_name,
+    get_product_name,
     get_product_root,
     get_sandbox_root_or_none,
 )
@@ -107,7 +108,7 @@ def main() -> int:
         # Discover platform root and resolve product name
         repo_root = find_repo_root()
         platform_root = find_platform_root(repo_root)
-        product_name = resolve_product_name(args.product)
+        product_name = get_product_name(args.product)
         
         print(f"Repository root: {repo_root}")
         print(f"Platform root: {platform_root}")

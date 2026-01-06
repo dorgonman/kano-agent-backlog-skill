@@ -404,3 +404,37 @@ def get_context(
         "product_root": product_root,
         "sandbox_root": sandbox_root,
     }
+
+
+def get_product_name(
+    product_arg: Optional[str] = None,
+    env_var: str = "KANO_PRODUCT",
+) -> str:
+    """
+    Simplified helper to get product name with standard fallback chain.
+    
+    This is a convenience function that wraps resolve_product_name() with
+    standard defaults for most CLI use cases.
+    
+    Resolution priority:
+    1. product_arg (if provided and non-empty)
+    2. Environment variable $KANO_PRODUCT (if set)
+    3. defaults.json -> "default_product" from _shared/
+    4. Hardcoded fallback: "kano-agent-backlog-skill"
+    
+    Args:
+        product_arg: Product name from CLI --product argument (or None).
+        env_var: Environment variable name (default: "KANO_PRODUCT").
+    
+    Returns:
+        Product name string (guaranteed non-empty).
+    
+    Example:
+        >>> product = get_product_name(args.product)
+        >>> # Uses args.product if provided, else env var, else defaults
+    """
+    return resolve_product_name(
+        product_arg=product_arg,
+        env_var=env_var,
+    )
+

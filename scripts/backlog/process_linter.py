@@ -18,6 +18,8 @@ from context import (  # noqa: E402
     find_repo_root,
     find_platform_root,
     get_product_root,
+    get_product_name,
+    resolve_product_name,
     get_sandbox_root_or_none,
     resolve_product_name,
 )
@@ -157,7 +159,7 @@ def main() -> int:
     args = parse_args()
     repo_root = find_repo_root()
     product_name, use_sandbox = get_product_and_sandbox_flags(args)
-    product_name = resolve_product_name(product_name)
+    product_name = get_product_name(product_name)
 
     backlog_root = resolve_backlog_root(repo_root, product_name, use_sandbox, args.backlog_root)
     items_root = backlog_root / "items"
