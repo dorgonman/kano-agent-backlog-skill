@@ -16,6 +16,7 @@ class BacklogItem:
     path: Path
     created: str
     updated: str
+    product: str
     frontmatter: Dict
 
 class BacklogIndex:
@@ -46,9 +47,9 @@ class BacklogIndex:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
         try:
-            cur.execute("SELECT uid, id, type, title, state, path, created, updated, frontmatter FROM items")
+            cur.execute("SELECT uid, id, type, title, state, path, created, updated, product, frontmatter FROM items")
             for row in cur.fetchall():
-                uid, did, type_, title, state, rel_path, created, updated, fm_json = row
+                uid, did, type_, title, state, rel_path, created, updated, product, fm_json = row
                 
                 fm = {}
                 if fm_json:
@@ -92,6 +93,7 @@ class BacklogIndex:
                     path=item_path,
                     created=created,
                     updated=updated,
+                    product=product or "kano-agent-backlog-skill",
                     frontmatter=fm
                 )
                 self._add_to_index(item)
@@ -114,6 +116,9 @@ class BacklogIndex:
                 uid = fm.get('uid', '')
                 uidshort = uid.replace("-", "")[:8] if uid else ""
                 
+                # Extract product from path
+                product = self._extract_product_from_path(f)
+                
                 item = BacklogItem(
                     uid=uid,
                     id=fm['id'],
@@ -124,6 +129,7 @@ class BacklogIndex:
                     path=f,
                     created=str(fm.get('created', '')),
                     updated=str(fm.get('updated', '')),
+                    product=product,
                     frontmatter=fm
                 )
                 self._add_to_index(item)
@@ -166,8 +172,11 @@ class BacklogIndex:
                 matches.append(item)
         return matches
 
-    def get_by_id(self, display_id: str) -> List[BacklogItem]:
-        return self.items_by_id.get(display_id, [])
+    def get_by_id(self, display_id: str, product: Optional[str] = None) -> List[BacklogItem]:
+        items = self.items_by_id.get(display_id, [])
+        if product:
+            return [item for item in items if item.product == product]
+        return items
     
     def get_collisions(self) -> Dict[str, List[BacklogItem]]:
         collisions = {}
@@ -175,3 +184,20 @@ class BacklogIndex:
             if len(items) > 1:
                 collisions[did] = items
         return collisions
+    
+    def _extract_product_from_path(self, path: Path) -> str:
+        """Extract product name from file path.
+        
+        Handles three path patterns:
+        - products/<product-name>/items/...  → product-name
+        - sandboxes/<product-name>/items/... → product-name
+        - items/...                          → kano-agent-backlog-skill (legacy)
+        """
+        parts = path.parts
+        for i, part in enumerate(parts):
+            if part == "products" and i + 1 < len(parts):
+                return parts[i + 1]
+            elif part == "sandboxes" and i + 1 < len(parts):
+                return parts[i + 1]
+        # Legacy: items/ without products/ or sandboxes/ prefix
+        return "kano-agent-backlog-skill"
