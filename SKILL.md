@@ -1,5 +1,5 @@
 ---
-name: kano-agent-backlog-skill
+name: project-backlog
 description: Local-first backlog workflow for this repo. Use when planning work, creating or updating Epics/Features/UserStories/Tasks/Bugs, writing ADRs, or enforcing the Ready gate before code changes.
 metadata:
   short-description: Local backlog system
@@ -11,14 +11,9 @@ metadata:
 
 Use this skill to:
 - Plan new work by creating backlog items before code changes.
-- Maintain work item hierarchy via parent links as defined by the active process profile.
+- Maintain Epic -> Feature -> UserStory -> Task/Bug hierarchy via parent links.
 - Record decisions with ADRs and link them to items.
 - Keep a durable, append-only worklog for project evolution.
-
-## Out of Scope
-
-- **Commit Message Conventions**: Formatting and linting of commit messages (see `kano-commit-convention-skill`).
-- **Code Linting/Formatting**: Validating the codebase itself (outside of backlog items).
 
 ## Non-negotiables
 
@@ -50,50 +45,17 @@ Use this skill to:
   - **Forbidden (Placeholders)**: `auto`, `user`, `assistant`, `<AGENT_NAME>`, `$AGENT_NAME`.
 - File operations for backlog/skill artifacts must go through skill scripts
   (`scripts/backlog/*` or `scripts/fs/*`) so audit logs capture the action.
-  - Mutating `scripts/fs/*` operations also require `--agent` and will auto-refresh dashboards by default.
 - Skill scripts only operate on paths under `_kano/backlog/` or `_kano/backlog_sandbox/`;
   refuse other paths.
-- Dashboard freshness:
-  - By default, mutating scripts (`workitem_create.py`, `workitem_update_state.py`, and `scripts/fs/*`) will auto-run
-    `scripts/backlog/view_refresh_dashboards.py` after they change files/items.
-  - Control this with `_kano/backlog/_config/config.json` -> `views.auto_refresh` (default: `true`).
-  - Per-invocation override: pass `--no-refresh` to skip.
-- `workitem_update_state.py` auto-syncs parent states forward-only by default; use `--no-sync-parent`
+- After modifying backlog items, refresh the plain Markdown views immediately using
+  `scripts/backlog/generate_view.py` so the demo dashboards stay current.
+- `update_state.py` auto-syncs parent states forward-only by default; use `--no-sync-parent`
   for manual re-plans where parent state should stay put.
 - Add Obsidian `[[wikilink]]` references in the body (e.g., a `## Links` section) so Graph/backlinks work; frontmatter alone does not create graph edges.
 
-## Owner & Agent Assignment
-
-- **Initial Owner**: When a human or agent creates a new work item, that creator becomes the initial owner (recorded in frontmatter `owner` field).
-- **Owner Transfer**: If an agent (other than the initial owner) decides to work on an item, the agent should:
-  1. Ask the human (user) whether to reassign ownership to the current agent.
-  2. If approved, update the `owner` field to the current agent's identity (e.g., `copilot`, `cursor`, `antigravity`).
-  3. Append a Worklog entry recording the reassignment: `[timestamp] [agent=<current>] Transferred ownership from <previous_owner>; beginning work.`
-- **Agent Identity**: Use your real product name/identity in the owner field and Worklog entries; never use placeholders.
-
-## First-run bootstrap (enable the backlog system)
-
-When this skill is present but the backlog scaffold is missing (no `_kano/backlog/` or no `_kano/backlog/_config/config.json`):
-
-1) Ask the user whether to enable the backlog system for this repo.
-2) If approved, run the initializer:
-   - `python scripts/backlog/bootstrap_init_project.py --agent <agent-name> --backlog-root _kano/backlog`
-
-What it does:
-- Creates `_kano/backlog/` scaffold (items/decisions/views + `_meta/indexes.md`)
-- Writes baseline config to `_kano/backlog/_config/config.json` and sets `project.name`/`project.prefix`
-- Refreshes canonical dashboards (`views/Dashboard_PlainMarkdown_*.md`)
-- Optionally writes/updates agent guide files at repo root (templates):
-  - `--write-guides create` (creates `AGENTS.md` / `CLAUDE.md` if missing, with the marked block)
-  - `--write-guides append` (appends the marked block into existing files)
-  - `--write-guides update` (updates the marked block if it already exists)
-
-If the user declines, do not create any files; continue with read-only guidance.
-
 ## ID prefix derivation
 
-- Preferred source of truth: `_kano/backlog/_config/config.json` -> `project.name` / `project.prefix`.
-- Legacy fallback: `config/profile.env` -> `PROJECT_NAME`.
+- Source of truth: `config/profile.env` -> `PROJECT_NAME`.
 - Derivation:
   - Split `PROJECT_NAME` on non-alphanumeric separators and camel-case boundaries.
   - Take the first letter of each segment.
@@ -103,9 +65,6 @@ If the user declines, do not create any files; continue with read-only guidance.
 - Example: `PROJECT_NAME=kano-agent-backlog-skill-demo` -> `KABSD`.
 
 ## Recommended layout
-
-Folder names should mirror the work item types in the active process profile.
-Defaults shown below are for the built-in profiles.
 
 - `_kano/backlog/_meta/` (schema, conventions, config)
 - `_kano/backlog/items/epics/`
@@ -120,15 +79,13 @@ Defaults shown below are for the built-in profiles.
 
 - Store items under `_kano/backlog/items/<type>/<bucket>/`.
 - Bucket names use 4 digits for the lower bound of each 100 range.
-  - Example: `0000`, `0100`, `0200`, `0300`, ..., `9900` (capacity: 10,000 items).
-  - Bucket formula: `bucket = (next_number // 100) * 100`, formatted as `f"{bucket:04d}"`.
+  - Example: `0000`, `0100`, `0200`, `0300`, ...
 - Example path:
   - `_kano/backlog/items/tasks/0000/KABSD-TSK-0007_define-secret-provider-validation.md`
-- Note: If item count exceeds 9,999, bucket folders will automatically expand to 5+ digits (e.g., `10000/`, `10100/`). This is not expected to occur for decades at typical project growth rates.
 
 ## Index/MOC files
 
-- For top-level items (e.g., Epic in built-in profiles), create an adjacent index file:
+- For Epic, create an adjacent index file:
   - `<ID>_<slug>.index.md`
 - Index files should render a tree using Dataview/DataviewJS and rely on `parent` links.
 - Track epic index files in `_kano/backlog/_meta/indexes.md` (type, item_id, index_file, updated, notes).
@@ -147,32 +104,14 @@ If the backlog structure is missing, propose creation and wait for user approval
 ## Scripts (optional automation)
 
 Backlog scripts:
-- `scripts/backlog/bootstrap_init_backlog.py`: initialize `_kano/backlog` scaffold
-- `scripts/backlog/bootstrap_init_project.py`: first-run bootstrap (scaffold + config + dashboards + optional guide templates)
-- `scripts/backlog/process_linter.py`: validate item folders against the active process profile (optionally create missing folders)
-- `scripts/backlog/workitem_create.py`: create a new backlog work item with ID + bucket (Epic can also create an index file)
-- `scripts/backlog/workitem_update_state.py`: update `state` + `updated` and append Worklog
-- `scripts/backlog/workitem_validate_ready.py`: check Ready gate sections
-- `scripts/backlog/view_generate.py`: generate plain Markdown views
-- `scripts/backlog/view_refresh_dashboards.py`: rebuild index (optional) and refresh standard dashboards
-- `scripts/backlog/view_generate_demo.py`: generate DBIndex/NoDBIndex demo views
-- `scripts/backlog/view_generate_tag.py`: generate tag-filtered views
-- `scripts/backlog/workitem_generate_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
-- `scripts/backlog/workitem_resolve_ref.py`: resolve id/uid references (with disambiguation)
-- `scripts/backlog/workitem_collision_report.py`: report duplicate display IDs
-- `scripts/backlog/link_disambiguation_report.py`: list ambiguous/invalid link refs; suggests `id@uidshort`/`uid`
-- `scripts/backlog/link_disambiguation_fix.py`: auto-fix link refs to `id@uidshort` when uniquely resolvable (prefer same product)
-- `scripts/backlog/maintenance_links_refresh.py`: one-shot run: link autofix -> index rebuild -> dashboard refresh
-- `scripts/backlog/workitem_attach_artifact.py`: copy artifacts and link them to items
-- `scripts/backlog/workset_init.py`: initialize workset cache (plan/notes/deliverables)
-- `scripts/backlog/workset_next.py`: show plan checklist from workset
-- `scripts/backlog/workset_refresh.py`: refresh workset metadata timestamp
-- `scripts/backlog/workset_promote.py`: promote deliverables to artifacts + worklog
-- `scripts/backlog/workset_detect_adr.py`: scan notes for Decision: markers; suggest ADR creation
-- `scripts/backlog/migration_add_uid.py`: add uid fields to existing items
-- `scripts/backlog/bootstrap_seed_demo.py`: seed demo items and views
-- `scripts/backlog/version_show.py`: show skill version metadata
-- `scripts/backlog/tests_smoke.py`: smoke tests for the backlog scripts
+- `scripts/backlog/init_backlog.py`: initialize `_kano/backlog` scaffold
+- `scripts/backlog/create_item.py`: create a new item with ID + bucket (Epic can also create an index file)
+- `scripts/backlog/update_state.py`: update `state` + `updated` and append Worklog
+- `scripts/backlog/validate_ready.py`: check Ready gate sections
+- `scripts/backlog/generate_view.py`: generate plain Markdown views
+- `scripts/backlog/generate_epic_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
+- `scripts/backlog/seed_demo.py`: seed demo items and views
+- `scripts/backlog/test_scripts.py`: smoke tests for the backlog scripts
 
 Filesystem scripts:
 - `scripts/fs/cp_file.py`: copy a file inside the repo
@@ -184,61 +123,14 @@ Logging scripts:
 - `scripts/logging/audit_logger.py`: JSONL audit log writer + redaction
 - `scripts/logging/run_with_audit.py`: run a command and append an audit log entry
 
+If the repo keeps its own `_kano/backlog/tools` wrappers, keep arguments consistent with these scripts.
+
 Audit logging requires running these scripts directly; do not perform ad-hoc file
 operations outside the script layer when working on backlog/skill artifacts.
 
 ## State update helper
 
-- Use `scripts/backlog/workitem_update_state.py` to update state + append Worklog.
+- Use `scripts/backlog/update_state.py` (or `_kano/backlog/tools/update_state.py` in the demo repo) to update state + append Worklog.
 - Prefer `--action` for common transitions (`start`, `ready`, `review`, `done`, `block`, `drop`).
 - When moving to Ready, it validates required sections unless `--force` is set.
-
-## Workset (Execution Layer) – Model Capability Equalizer
-
-**Purpose**: Local work cache that equalizes execution quality across different-sized models.
-
-**Problem it solves**:
-- Strong models (Claude Opus/Sonnet, GPT-4) have built-in planning + reasoning chains.
-- Weak models (GPT-3.5, small open-source) lack structured execution and drift without external scaffolding.
-- Workset provides **forced plan-first structure** so weak models execute consistently, while strong models use it as overflow memory.
-
-**Key Iron Law**:
-- Cache is discardable: `_kano/backlog/sandboxes/.cache/<uid>/` is gitignored and rebuildable.
-- Canonical promotion is mandatory: decisions, state changes, and deliverables MUST be written back to item/ADR/worklog.
-
-**Scripts**:
-- `workset_init.py`: Initialize cache with `plan.md` (checklist), `notes.md`, `deliverables/`
-- `workset_next.py`: Show plan checklist (agent should read this before executing)
-- `workset_refresh.py`: Update cache metadata timestamp
-- `workset_promote.py`: Promote deliverables to artifacts + append worklog summary
-- `workset_detect_adr.py`: Scan `notes.md` for Decision: markers; suggest ADR creation
-
-**Workflow**:
-1. Agent starts work: `workset_init.py --item <id> --agent <name>`
-2. Agent reads plan: `workset_next.py --item <id>` → get checklist
-3. Agent works in `.cache/<uid>/`, writes notes/deliverables
-4. Agent detects decisions: `workset_detect_adr.py --item <id>` → prompt for ADR
-5. Agent promotes: `workset_promote.py --item <id> --agent <name>` → attach artifacts + worklog
-
-**Multi-model strategy**:
-- Weak models: workset is **execution framework** (mandatory plan → verify cycle)
-- Strong models: workset is **backup memory** (avoid context overflow drift)
-- Result: mixed-model teams execute with consistent quality
-
-## Routine maintenance (links + index + dashboards)
-
-- One-command maintenance（含自動修正、重建索引、刷新看板）:
-
-  ```bash
-  python skills/backlog/maintenance_links_refresh.py \
-    --backlog-root _kano/backlog \
-    --agent <agent> \
-    --product kano-agent-backlog-skill
-  ```
-
-- 若只想預覽修正，不寫入：加上 `--dry-run-fix`
-- 內部步驟：
-  1) `link_disambiguation_fix.py`（僅 links，唯一解析時才改為 `id@uidshort`；不動 parent）
-  2) `build_sqlite_index.py --mode rebuild`（寫入 `target_uid`）
-  3) `view_refresh_dashboards.py`（可選 product）
 
