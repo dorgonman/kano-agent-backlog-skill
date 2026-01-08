@@ -112,6 +112,7 @@ Backlog scripts:
 - `scripts/backlog/generate_epic_index.py`: generate item index (MOC) with task state labels (Epic/Feature/UserStory)
 - `scripts/backlog/seed_demo.py`: seed demo items and views
 - `scripts/backlog/test_scripts.py`: smoke tests for the backlog scripts
+- `scripts/backlog/workitem_get_max_numbers.py`: find the highest number for each work item type
 
 Filesystem scripts:
 - `scripts/fs/cp_file.py`: copy a file inside the repo

@@ -25,7 +25,8 @@ from config_loader import (  # noqa: E402
     resolve_allowed_root,
     validate_config,
 )
-from product_args import add_product_arguments  # noqa: E402
+from context import find_platform_root, get_product_root, get_sandbox_root_or_none  # noqa: E402
+from product_args import add_product_arguments, get_product_and_sandbox_flags  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,6 +67,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print commands without executing.",
     )
+    parser.add_argument(
+        "--products",
+        action="append",
+        help="Comma-separated product names to aggregate (repeatable).",
+    )
+    parser.add_argument(
+        "--all-products",
+        action="store_true",
+        help="Aggregate across all products under the platform root.",
+    )
     add_product_arguments(parser)
     return parser.parse_args()
 
@@ -98,6 +109,38 @@ def run_cmd(cmd: List[str], dry_run: bool) -> None:
         raise SystemExit(result.stderr.strip() or result.stdout.strip() or f"Command failed: {' '.join(cmd)}")
 
 
+def parse_products_values(values: Optional[List[str]]) -> List[str]:
+    if not values:
+        return []
+    products: List[str] = []
+    for raw in values:
+        if not raw:
+            continue
+        for part in raw.split(","):
+            name = part.strip()
+            if name:
+                products.append(name)
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for name in products:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    return deduped
+
+
+def list_all_products(platform_root: Path) -> List[str]:
+    products_dir = platform_root / "products"
+    if not products_dir.exists():
+        return []
+    names: List[str] = []
+    for entry in sorted(products_dir.iterdir()):
+        if entry.is_dir() and not entry.name.startswith("."):
+            names.append(entry.name)
+    return names
+
+
 def main() -> int:
     args = parse_args()
     agent = args.agent
@@ -105,9 +148,25 @@ def main() -> int:
     repo_root = Path.cwd().resolve()
     allowed_roots = allowed_roots_for_repo(repo_root)
 
+    products = parse_products_values(getattr(args, "products", None))
+    if getattr(args, "all_products", False):
+        if products:
+            raise SystemExit("--products and --all-products cannot be used together.")
+        products = list_all_products(find_platform_root(repo_root))
+
+    product_name, use_sandbox = get_product_and_sandbox_flags(args)
+    if product_name and products:
+        raise SystemExit("Use either --product or --products/--all-products, not both.")
+
     backlog_root = Path(args.backlog_root)
     if not backlog_root.is_absolute():
         backlog_root = (repo_root / backlog_root).resolve()
+    if product_name and str(args.backlog_root).strip() == "_kano/backlog":
+        platform_root = find_platform_root(repo_root)
+        if use_sandbox:
+            backlog_root = get_sandbox_root_or_none(product_name, platform_root) or (platform_root / "sandboxes" / product_name)
+        else:
+            backlog_root = get_product_root(product_name, platform_root)
     root = ensure_under_allowed(backlog_root, allowed_roots, "backlog-root")
 
     config_path = resolve_config_for_backlog_root(backlog_root, args.config)
@@ -116,29 +175,68 @@ def main() -> int:
     if errors:
         raise SystemExit("Invalid config:\n- " + "\n- ".join(errors))
 
-    index_enabled = bool(get_config_value(config, "index.enabled", False))
-    backend = str(get_config_value(config, "index.backend") or "sqlite").strip().lower()
-
     refresh = args.refresh_index
-    if refresh == "auto":
-        refresh = "incremental" if index_enabled and backend == "sqlite" else "skip"
 
     python = sys.executable
     scripts_root = Path(__file__).resolve().parents[1]
 
-    if refresh != "skip":
-        if backend != "sqlite":
-            print(f"Skip index refresh: backend={backend} (only sqlite supported).")
-        else:
+    if products:
+        platform_root = find_platform_root(repo_root)
+        if refresh != "skip":
             build = scripts_root / "indexing" / "build_sqlite_index.py"
-            cmd = [python, str(build), "--backlog-root", str(backlog_root), "--agent", agent, "--mode", refresh]
-            if args.config:
-                cmd.extend(["--config", args.config])
-            run_cmd(cmd, args.dry_run)
+            for name in products:
+                product_root = (
+                    (get_sandbox_root_or_none(name, platform_root) or (platform_root / "sandboxes" / name))
+                    if use_sandbox
+                    else get_product_root(name, platform_root)
+                )
+                per_config_path = resolve_config_for_backlog_root(product_root, args.config)
+                per_config = load_config_with_defaults(
+                    repo_root=repo_root,
+                    config_path=per_config_path,
+                    product_name=name,
+                )
+                per_errors = validate_config(per_config)
+                if per_errors:
+                    raise SystemExit("Invalid config:\n- " + "\n- ".join(per_errors))
+                index_enabled = bool(get_config_value(per_config, "index.enabled", False))
+                backend = str(get_config_value(per_config, "index.backend") or "sqlite").strip().lower()
+                mode = refresh
+                if mode == "auto":
+                    mode = "incremental" if index_enabled and backend == "sqlite" else "skip"
+                if mode == "skip":
+                    continue
+                if backend != "sqlite":
+                    print(f"Skip index refresh: backend={backend} (only sqlite supported).")
+                    continue
+                cmd = [python, str(build), "--backlog-root", str(product_root), "--agent", agent, "--mode", mode]
+                if args.config:
+                    cmd.extend(["--config", args.config])
+                run_cmd(cmd, args.dry_run)
+    else:
+        index_enabled = bool(get_config_value(config, "index.enabled", False))
+        backend = str(get_config_value(config, "index.backend") or "sqlite").strip().lower()
+        mode = refresh
+        if mode == "auto":
+            mode = "incremental" if index_enabled and backend == "sqlite" else "skip"
+        if mode != "skip":
+            if backend != "sqlite":
+                print(f"Skip index refresh: backend={backend} (only sqlite supported).")
+            else:
+                build = scripts_root / "indexing" / "build_sqlite_index.py"
+                cmd = [python, str(build), "--backlog-root", str(backlog_root), "--agent", agent, "--mode", mode]
+                if args.config:
+                    cmd.extend(["--config", args.config])
+                run_cmd(cmd, args.dry_run)
 
     generate = scripts_root / "backlog" / "view_generate.py"
     items_root = backlog_root / "items"
     views_root = backlog_root / "views"
+
+    if products:
+        platform_root = find_platform_root(repo_root)
+        items_root = platform_root / "items"
+        views_root = platform_root / "views"
 
     dashboards = [
         ("New,InProgress", "InProgress Work", views_root / "Dashboard_PlainMarkdown_Active.md"),
@@ -163,6 +261,8 @@ def main() -> int:
             "--title",
             title,
         ]
+        if products:
+            cmd.extend(["--products", ",".join(products)])
         if args.config:
             cmd.extend(["--config", args.config])
         run_cmd(cmd, args.dry_run)

@@ -7,7 +7,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 sys.dont_write_bytecode = True
 
@@ -20,6 +20,7 @@ COMMON_DIR = Path(__file__).resolve().parents[1] / "common"
 if str(COMMON_DIR) not in sys.path:
     sys.path.insert(0, str(COMMON_DIR))
 from config_loader import get_config_value, load_config_with_defaults, validate_config  # noqa: E402
+from context import find_platform_root, get_product_root, get_sandbox_root_or_none, resolve_product_name  # noqa: E402
 from product_args import add_product_arguments, get_product_and_sandbox_flags  # noqa: E402
 
 
@@ -114,6 +115,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-label",
         help="Optional label shown in output (default: --items-root).",
+    )
+    parser.add_argument(
+        "--products",
+        action="append",
+        help="Comma-separated product names to aggregate (repeatable).",
+    )
+    parser.add_argument(
+        "--all-products",
+        action="store_true",
+        help="Aggregate across all products under the platform root.",
     )
     add_product_arguments(parser)
     return parser.parse_args()
@@ -256,6 +267,7 @@ def format_items(
     title: str,
     allowed_groups: List[str],
     source_label: str,
+    command: Optional[str],
 ) -> List[str]:
     out_dir = output_path.parent
     lines: List[str] = []
@@ -264,6 +276,12 @@ def format_items(
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     lines.append(f"Generated: {timestamp}")
     lines.append(f"Source: {source_label}")
+    if command:
+        lines.append("Command:")
+        lines.append("")
+        lines.append("```bash")
+        lines.append(command)
+        lines.append("```")
     lines.append("")
 
     for group in allowed_groups:
@@ -308,11 +326,100 @@ def format_items(
     return lines
 
 
+def parse_products_values(values: Optional[List[str]]) -> List[str]:
+    if not values:
+        return []
+    products: List[str] = []
+    for raw in values:
+        if not raw:
+            continue
+        for part in raw.split(","):
+            name = part.strip()
+            if name:
+                products.append(name)
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for name in products:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    return deduped
+
+
+def list_all_products(platform_root: Path) -> List[str]:
+    products_dir = platform_root / "products"
+    if not products_dir.exists():
+        return []
+    names: List[str] = []
+    for entry in sorted(products_dir.iterdir()):
+        if entry.is_dir() and not entry.name.startswith("."):
+            names.append(entry.name)
+    return names
+
+
+def merge_groups(
+    target: Dict[str, Dict[str, List[Tuple[str, str, Path, Dict[str, List[str]]]]]],
+    source: Dict[str, Dict[str, List[Tuple[str, str, Path, Dict[str, List[str]]]]]],
+) -> None:
+    for group, types in source.items():
+        for item_type, items in types.items():
+            target.setdefault(group, {}).setdefault(item_type, []).extend(items)
+
+
+def path_to_repo_relative(repo_root: Path, raw: str) -> str:
+    try:
+        p = Path(raw)
+    except Exception:
+        return raw
+    if not p.is_absolute():
+        return raw.replace("\\", "/")
+    try:
+        rel = p.resolve().relative_to(repo_root.resolve())
+        return str(rel).replace("\\", "/")
+    except Exception:
+        return raw.replace("\\", "/")
+
+
+def normalize_cli_token(repo_root: Path, token: str) -> str:
+    if not token:
+        return token
+    if token.startswith("-"):
+        return token
+    looks_like_path = ("/" in token) or ("\\" in token) or token.startswith(".")
+    if not looks_like_path:
+        return token
+    rendered = path_to_repo_relative(repo_root, token)
+    if " " in rendered:
+        return f'"{rendered}"'
+    return rendered
+
+
+def command_from_argv(repo_root: Path) -> str:
+    argv = list(sys.argv)
+    if not argv:
+        return "python"
+    argv[0] = "python"
+    normalized = [normalize_cli_token(repo_root, tok) for tok in argv]
+    return " ".join(normalized)
+
+
 def main() -> int:
     args = parse_args()
     repo_root = Path.cwd().resolve()
     allowed_roots = allowed_roots_for_repo(repo_root)
     allowed_groups = [group.strip() for group in args.groups.split(",") if group.strip()]
+
+    products = parse_products_values(getattr(args, "products", None))
+    if getattr(args, "all_products", False):
+        if products:
+            raise SystemExit("--products and --all-products cannot be used together.")
+        platform_root = find_platform_root(repo_root)
+        products = list_all_products(platform_root)
+
+    product_name, use_sandbox = get_product_and_sandbox_flags(args)
+    if product_name and products:
+        raise SystemExit("Use either --product or --products/--all-products, not both.")
     items_root = Path(args.items_root)
     if not items_root.is_absolute():
         items_root = (repo_root / items_root).resolve()
@@ -332,35 +439,95 @@ def main() -> int:
     if output_root != items_root_root:
         raise SystemExit("items-root and output must share the same root.")
 
-    config_path = resolve_config_for_backlog_root(repo_root, backlog_root, args.config)
-    config = load_config_with_defaults(repo_root=repo_root, config_path=config_path)
-    errors = validate_config(config)
-    if errors:
-        raise SystemExit("Invalid config:\n- " + "\n- ".join(errors))
+    if product_name:
+        product_name = resolve_product_name(product_name, platform_root=find_platform_root(repo_root))
+        products = [product_name]
 
-    db_path = resolve_db_path(repo_root, backlog_root, config, args.db_path)
-    ensure_under_allowed(db_path, allowed_roots, "db-path")
-
-    index_enabled = bool(get_config_value(config, "index.enabled", False))
-    use_sqlite = False
-    if args.source == "sqlite":
-        use_sqlite = True
-    elif args.source == "files":
-        use_sqlite = False
-    else:
-        use_sqlite = index_enabled and db_path.exists()
-
+    groups: Dict[str, Dict[str, List[Tuple[str, str, Path, Dict[str, List[str]]]]]] = {}
     source_label = args.source_label or args.items_root
-    if use_sqlite:
-        if not db_path.exists():
-            raise SystemExit(f"DB does not exist: {db_path}\nRun scripts/indexing/build_sqlite_index.py first.")
-        source_label = args.source_label or f"sqlite:{db_path.as_posix()}"
-        groups = collect_items_from_sqlite(repo_root, db_path, allowed_groups)
+    if not args.source_label:
+        source_label = path_to_repo_relative(repo_root, str(source_label))
+    cmd = command_from_argv(repo_root)
+
+    if products:
+        platform_root = find_platform_root(repo_root)
+        if args.source_label:
+            source_label = args.source_label
+        else:
+            source_label = f"products:{','.join(products)}"
+        for name in products:
+            product_root = (
+                (get_sandbox_root_or_none(name, platform_root) or (platform_root / "sandboxes" / name))
+                if use_sandbox
+                else get_product_root(name, platform_root)
+            )
+            items_path = product_root / "items"
+            ensure_under_allowed(items_path, allowed_roots, "items-root")
+
+            config = load_config_with_defaults(repo_root=repo_root, config_path=args.config, product_name=name)
+            errors = validate_config(config)
+            if errors:
+                raise SystemExit("Invalid config:\n- " + "\n- ".join(errors))
+            db_path = resolve_db_path(repo_root, product_root, config, args.db_path)
+            ensure_under_allowed(db_path, allowed_roots, "db-path")
+
+            index_enabled = bool(get_config_value(config, "index.enabled", False))
+            use_sqlite = False
+            if args.source == "sqlite":
+                use_sqlite = True
+            elif args.source == "files":
+                use_sqlite = False
+            else:
+                use_sqlite = index_enabled and db_path.exists()
+
+            if use_sqlite:
+                if not db_path.exists():
+                    raise SystemExit(
+                        f"DB does not exist: {db_path}\nRun scripts/indexing/build_sqlite_index.py first."
+                    )
+                if args.source_label:
+                    source_label = args.source_label
+                else:
+                    source_label = f"sqlite:{path_to_repo_relative(repo_root, db_path.as_posix())}"
+                merge_groups(groups, collect_items_from_sqlite(repo_root, db_path, allowed_groups))
+            else:
+                merge_groups(groups, collect_items(items_path, allowed_groups))
     else:
-        if args.source == "auto" and index_enabled and not db_path.exists():
-            source_label = args.source_label or f"files:{args.items_root} (sqlite missing, fallback)"
-        groups = collect_items(items_root, allowed_groups)
-    output_lines = format_items(groups, output_path, args.title, allowed_groups, source_label)
+        config = load_config_with_defaults(repo_root=repo_root, config_path=args.config)
+        errors = validate_config(config)
+        if errors:
+            raise SystemExit("Invalid config:\n- " + "\n- ".join(errors))
+
+        db_path = resolve_db_path(repo_root, backlog_root, config, args.db_path)
+        ensure_under_allowed(db_path, allowed_roots, "db-path")
+
+        index_enabled = bool(get_config_value(config, "index.enabled", False))
+        use_sqlite = False
+        if args.source == "sqlite":
+            use_sqlite = True
+        elif args.source == "files":
+            use_sqlite = False
+        else:
+            use_sqlite = index_enabled and db_path.exists()
+
+        if use_sqlite:
+            if not db_path.exists():
+                raise SystemExit(
+                    f"DB does not exist: {db_path}\nRun scripts/indexing/build_sqlite_index.py first."
+                )
+            if args.source_label:
+                source_label = args.source_label
+            else:
+                source_label = f"sqlite:{path_to_repo_relative(repo_root, db_path.as_posix())}"
+            groups = collect_items_from_sqlite(repo_root, db_path, allowed_groups)
+        else:
+            if args.source == "auto" and index_enabled and not db_path.exists():
+                if args.source_label:
+                    source_label = args.source_label
+                else:
+                    source_label = f"files:{path_to_repo_relative(repo_root, str(args.items_root))} (sqlite missing, fallback)"
+            groups = collect_items(items_root, allowed_groups)
+    output_lines = format_items(groups, output_path, args.title, allowed_groups, source_label, cmd)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
     return 0
