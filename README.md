@@ -62,6 +62,45 @@ python scripts/backlog/bootstrap_seed_demo.py --backlog-root _kano/backlog --age
 - `bootstrap_seed_demo.py` creates demo Epic/Feature/UserStory/Task/Bug items tagged `demo-seed`, plus `Dashboard_PlainMarkdown_*.md` views (unless `--skip-views`).
 - Use `--dry-run` to preview and `--force` to overwrite existing baseline files or allow reseeding.
 
+## Skill 的結構（Self-contained）
+
+```
+kano-agent-backlog-skill/
+├── src/                           # 統一的 Python 源代碼目錄
+│   ├── kano_backlog_core/         # 核心域庫（原 kano-backlog-core/src/）
+│   │   ├── config.py              # 配置和上下文解析
+│   │   ├── canonical.py           # 標準文件存儲（markdown SSOT）
+│   │   ├── models.py              # Pydantic 數據模型
+│   │   ├── derived.py             # 索引查詢抽象
+│   │   ├── refs.py                # 參考解析和解決
+│   │   ├── state.py               # 狀態機
+│   │   ├── audit.py               # 審計日誌
+│   │   └── errors.py              # 類型化異常
+│   └── kano_cli/                  # CLI 門面（原 kano-cli/）
+│       ├── cli.py
+│       ├── util.py
+│       └── commands/
+├── scripts/                       # 自動化和工具腳本
+│   ├── backlog/                   # 工項管理腳本
+│   ├── indexing/                  # 索引構建腳本
+│   ├── logging/                   # 審計日誌腳本
+│   ├── common/                    # 共享工具函數
+│   ├── fs/                        # 文件操作
+│   └── vcs/                       # VCS 適配器
+├── templates/                     # 工項和 ADR 模板
+├── references/                    # 參考文檔（schema、workflow、views）
+├── pyproject.toml                 # 統一的項目配置和依賴
+├── SKILL.md                       # Agent 行為規範
+└── ...
+```
+
+此 skill 現在是 **完全自洽的**（self-contained）：不需要依賴位於根層級的 `kano-backlog-core` 或 `kano-cli`。所有核心模塊都包含在 `src/` 目錄下，可以直接複製整個 `skills/kano-agent-backlog-skill/` 目錄到其他項目使用。
+
+**建議的使用方法**：
+1. 將 `skills/kano-agent-backlog-skill/` 作為 git submodule 添加到你的項目
+2. 運行 `pip install -e ./skills/kano-agent-backlog-skill` 來安裝 skill 及其依賴
+3. 使用 skill 的 scripts 和 CLI 工具管理你的本地優先 backlog
+
 ## 建議的 backlog 結構（在你的專案內）
 
 ```text

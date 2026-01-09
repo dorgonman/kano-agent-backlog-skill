@@ -1,0 +1,112 @@
+"""Pydantic models for backlog items."""
+
+from enum import Enum
+from typing import Dict, Any, List, Optional
+from pathlib import Path
+from pydantic import BaseModel, Field, ConfigDict
+
+
+class ItemType(str, Enum):
+    """Backlog item type."""
+
+    EPIC = "Epic"
+    FEATURE = "Feature"
+    USER_STORY = "UserStory"
+    TASK = "Task"
+    BUG = "Bug"
+
+
+class ItemState(str, Enum):
+    """Backlog item state."""
+
+    NEW = "New"
+    PROPOSED = "Proposed"
+    READY = "Ready"
+    IN_PROGRESS = "InProgress"
+    REVIEW = "Review"
+    DONE = "Done"
+    BLOCKED = "Blocked"
+    DROPPED = "Dropped"
+
+
+class StateAction(str, Enum):
+    """Actions that trigger state transitions."""
+    
+    PROPOSE = "propose"      # New → Proposed
+    READY = "ready"          # Proposed → Ready
+    START = "start"          # Ready/New → InProgress
+    REVIEW = "review"        # InProgress → Review
+    DONE = "done"            # InProgress/Review → Done
+    BLOCK = "block"          # Any → Blocked
+    DROP = "drop"            # Any → Dropped
+
+
+class BacklogItem(BaseModel):
+    """Parsed backlog item with frontmatter and body."""
+
+    # Frontmatter fields
+    id: str = Field(..., description="Display ID (e.g., KABSD-TSK-0115)")
+    uid: str = Field(..., description="UUIDv7 (immutable primary key)")
+    type: ItemType
+    title: str
+    state: ItemState
+    priority: Optional[str] = Field(None, description="P0, P1, P2, P3")
+    parent: Optional[str] = Field(None, description="Parent display ID")
+    owner: Optional[str] = Field(None, description="Agent or user name")
+    tags: List[str] = Field(default_factory=list)
+    created: str = Field(..., description="ISO date (YYYY-MM-DD)")
+    updated: str = Field(..., description="ISO date (YYYY-MM-DD)")
+    area: Optional[str] = None
+    iteration: Optional[str] = None
+    external: Dict[str, Any] = Field(default_factory=dict)
+    links: Dict[str, List[str]] = Field(
+        default_factory=lambda: {"relates": [], "blocks": [], "blocked_by": []}
+    )
+    decisions: List[str] = Field(default_factory=list, description="ADR references")
+
+    # Body sections (parsed from markdown)
+    context: Optional[str] = None
+    goal: Optional[str] = None
+    non_goals: Optional[str] = None
+    approach: Optional[str] = None
+    alternatives: Optional[str] = None
+    acceptance_criteria: Optional[str] = None
+    risks: Optional[str] = None
+    worklog: List[str] = Field(default_factory=list, description="Parsed worklog entries")
+
+    # Metadata
+    file_path: Optional[Path] = Field(None, description="Absolute path to .md file")
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,  # Allow Path type
+        use_enum_values=False,  # Keep enum objects, not string values
+    )
+
+
+class WorklogEntry(BaseModel):
+    """Single worklog entry."""
+
+    timestamp: str = Field(..., description="YYYY-MM-DD HH:MM format")
+    agent: str
+    message: str
+
+    @classmethod
+    def parse(cls, line: str) -> Optional["WorklogEntry"]:
+        """
+        Parse worklog line: "2026-01-07 19:59 [agent=copilot] Message"
+
+        Returns:
+            WorklogEntry or None if parse fails
+        """
+        import re
+
+        pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) \[agent=([^\]]+)\] (.+)$"
+        match = re.match(pattern, line.strip())
+        if not match:
+            return None
+        timestamp, agent, message = match.groups()
+        return cls(timestamp=timestamp, agent=agent, message=message)
+
+    def format(self) -> str:
+        """Format as: 2026-01-07 19:59 [agent=copilot] Message"""
+        return f"{self.timestamp} [agent={self.agent}] {self.message}"

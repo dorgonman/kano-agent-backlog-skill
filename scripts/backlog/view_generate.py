@@ -175,12 +175,29 @@ def parse_frontmatter(path: Path) -> Dict[str, str]:
     return data
 
 
+def is_legacy_plural_product_items_path(path: Path) -> bool:
+    parts = list(path.as_posix().split("/"))
+    try:
+        items_idx = parts.index("items")
+    except ValueError:
+        return False
+    if "products" not in parts:
+        return False
+    if items_idx + 1 >= len(parts):
+        return False
+    next_dir = parts[items_idx + 1]
+    legacy_plural = {"epics", "features", "tasks", "userstories", "bugs"}
+    return next_dir in legacy_plural
+
+
 def collect_items(
     root: Path,
     allowed_groups: List[str],
 ) -> Dict[str, Dict[str, List[Tuple[str, str, Path, Dict[str, List[str]]]]]]:
     groups: Dict[str, Dict[str, List[Tuple[str, str, Path, Dict[str, List[str]]]]]] = {}
     for path in root.rglob("*.md"):
+        if is_legacy_plural_product_items_path(path):
+            continue
         if path.name == "README.md" or path.name.endswith(".index.md"):
             continue
         # Use full YAML parser to get links properly if available
@@ -399,9 +416,23 @@ def command_from_argv(repo_root: Path) -> str:
     argv = list(sys.argv)
     if not argv:
         return "python"
-    argv[0] = "python"
-    normalized = [normalize_cli_token(repo_root, tok) for tok in argv]
-    return " ".join(normalized)
+    raw_script = argv[0]
+    script_token = raw_script
+    try:
+        script_path = Path(raw_script)
+        if not script_path.is_absolute():
+            script_path = (repo_root / script_path).resolve()
+        script_token = path_to_repo_relative(repo_root, str(script_path))
+    except Exception:
+        script_token = raw_script
+
+    normalized_args = [normalize_cli_token(repo_root, tok) for tok in argv[1:]]
+    cmd = "python"
+    if script_token:
+        cmd += f" {normalize_cli_token(repo_root, script_token)}"
+    if normalized_args:
+        cmd += " " + " ".join(normalized_args)
+    return cmd
 
 
 def main() -> int:

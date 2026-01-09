@@ -12,6 +12,7 @@ The `references/` folder is intentionally split into multiple small files so an 
 - `logging.md`: audit log schema, redaction, rotation defaults
 - `processes.md`: process profile schema and examples
 - `indexing.md`: optional indexing layer (artifacts, config, rebuild workflow)
+- `context_graph.md`: context graph + Graph-assisted retrieval (weak graph)
 - `indexing_schema.sql`: optional DB index schema (SQLite-first)
 - `indexing_schema.json`: DB schema description (machine-readable)
 

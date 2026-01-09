@@ -84,6 +84,14 @@ Optional (planned): generate Markdown dashboards from DB queries to reduce depen
 If you enable `index.enabled=true`, `scripts/backlog/view_generate.py --source auto` can use the SQLite index
 when present, and falls back to file scan when the DB is missing.
 
+
+## Context graph (Graph-assisted retrieval)
+
+A **context graph** is a derived, structured view of how artifacts relate (items, ADRs, dependencies, refs).
+It enables **Graph-assisted retrieval**: retrieve seed nodes via FTS/embeddings, then expand via graph edges (k-hop)
+to assemble a higher-quality context pack.
+
+- Concept/spec: `references/context_graph.md`
 ## DB-first is out of scope
 
 Using a database as the **source of truth** would require new UI/export tooling and changes to the human-in-the-loop workflow.
