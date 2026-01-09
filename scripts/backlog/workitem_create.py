@@ -429,7 +429,10 @@ def main() -> int:
         print("Warning: non-Epic item without --parent.")
 
     items_root = product_root / "items"
-    next_number = find_next_number(items_root / type_folder, prefix, type_code)
+    # Numbering must be unique within the product even during migrations where
+    # legacy and new folder layouts can coexist (e.g. `items/feature/` vs `items/features/`).
+    # Scan the entire items root for this type code to avoid ID collisions.
+    next_number = find_next_number(items_root, prefix, type_code)
     bucket = (next_number // 100) * 100
     bucket_str = f"{bucket:04d}"
 

@@ -98,7 +98,13 @@ def main() -> int:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except Exception:
             meta = {}
-    meta["refreshed"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    # Update refreshed timestamp and extend claim_until (TTL)
+    now = datetime.datetime.now()
+    meta["refreshed"] = now.strftime("%Y-%m-%d %H:%M")
+    ttl_hours = meta.get("ttl_hours", 72)
+    meta["claim_until"] = (now + datetime.timedelta(hours=ttl_hours)).isoformat()
+    
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # Append worklog to item

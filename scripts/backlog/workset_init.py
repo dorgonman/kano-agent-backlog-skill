@@ -98,11 +98,19 @@ def main() -> int:
     # Seed templates
     (ws_dir / "plan.md").write_text(PLAN_TEMPLATE, encoding="utf-8")
     (ws_dir / "notes.md").write_text(NOTES_TEMPLATE, encoding="utf-8")
+    
+    # Meta includes both short id and full doc_id (filename), plus TTL
+    now = datetime.datetime.now()
+    claim_until = (now + datetime.timedelta(hours=72)).isoformat()  # 72-hour default TTL
+    
     meta = {
         "uid": item.uid,
         "id": item.id,
-        "created": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "doc_id": item.path.stem,  # Filename without .md extension
+        "created": now.strftime("%Y-%m-%d %H:%M"),
         "agent": args.agent,
+        "ttl_hours": 72,
+        "claim_until": claim_until,
     }
     import json
     (ws_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")

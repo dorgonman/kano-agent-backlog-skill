@@ -36,6 +36,7 @@ def search_fts5(
     query: str,
     limit: int = 10,
     product: Optional[str] = None,
+    doc_ids: Optional[list[str]] = None,
 ) -> list[dict]:
     """
     Full-text search using FTS5.
@@ -43,16 +44,22 @@ def search_fts5(
     """
     cursor = conn.cursor()
     
-    # Build WHERE clause for product filter
-    product_where = ""
-    params: list = []
+    # Build WHERE clause for product and doc_id filters
+    where_clauses = ["chunks_fts MATCH ?"]
+    params: list = [query]
     
     if product:
-        product_where = "AND documents.product = ?"
+        where_clauses.append("documents.product = ?")
         params.append(product)
     
+    if doc_ids:
+        placeholders = ", ".join("?" * len(doc_ids))
+        where_clauses.append(f"documents.id IN ({placeholders})")
+        params.extend(doc_ids)
+    
+    where_clause = " AND ".join(where_clauses)
+    
     # FTS5 search with rank scoring
-    # Note: FTS5 MATCH clause must be in the WHERE condition directly
     sql = f"""
     SELECT
         chunks_fts.rowid as chunk_rowid,
@@ -65,12 +72,11 @@ def search_fts5(
     FROM chunks_fts
     JOIN chunks ON chunks_fts.rowid = chunks.chunk_rowid
     JOIN documents ON chunks.doc_id = documents.id
-    WHERE chunks_fts MATCH ? {product_where}
+    WHERE {where_clause}
     ORDER BY chunks_fts.rank ASC
     LIMIT ?
     """
     
-    params.insert(0, query)
     params.append(limit)
     
     cursor.execute(sql, params)
@@ -101,6 +107,7 @@ def search_faiss(
     mapping: dict,
     limit: int = 10,
     product: Optional[str] = None,
+    doc_ids: Optional[list[str]] = None,
 ) -> list[dict]:
     """
     Semantic search using FAISS.
@@ -140,6 +147,10 @@ def search_faiss(
         
         # Filter by product if needed
         if product and row[4] != product:
+            continue
+        
+        # Filter by doc_ids if provided
+        if doc_ids and row[1] not in doc_ids:
             continue
         
         # Normalize distance to similarity score (lower distance = higher similarity)
@@ -234,13 +245,14 @@ def search_hybrid(
     mapping_path: Optional[Path] = None,
     limit: int = 10,
     product: Optional[str] = None,
+    doc_ids: Optional[list[str]] = None,
 ) -> list[dict]:
     """
     Hybrid search: FTS5 + FAISS with RRF.
     Returns: ranked results combining both methods.
     """
     # FTS5 search (always available)
-    fts_results = search_fts5(conn, query, limit, product)
+    fts_results = search_fts5(conn, query, limit, product, doc_ids)
     
     # FAISS search (optional)
     faiss_results = []
@@ -252,7 +264,7 @@ def search_hybrid(
             with open(mapping_path) as f:
                 mapping = json.load(f)
             
-            faiss_results = search_faiss(conn, query, model, index, mapping, limit, product)
+            faiss_results = search_faiss(conn, query, model, index, mapping, limit, product, doc_ids)
         except Exception as e:
             print(f"WARNING: FAISS search failed: {e}", file=sys.stderr)
     
@@ -314,6 +326,14 @@ def main():
         action='store_true',
         help='Skip FAISS and use FTS5-only search.'
     )
+    parser.add_argument(
+        '--workset',
+        help='Workset UID; restricts search to that workset\'s item. Reads from meta.json.'
+    )
+    parser.add_argument(
+        '--doc-ids',
+        help='Comma-separated doc IDs to filter results (e.g., KABSD-TSK-0056_...).'
+    )
     
     args = parser.parse_args()
     
@@ -343,6 +363,25 @@ def main():
             index_path = index_file
             mapping_path = mapping_file
     
+    # Resolve doc_ids from --workset or --doc-ids
+    doc_ids: Optional[list[str]] = None
+    if args.workset:
+        ws_meta_path = backlog_root / 'sandboxes' / '.cache' / args.workset / 'meta.json'
+        if ws_meta_path.exists():
+            try:
+                ws_meta = json.loads(ws_meta_path.read_text(encoding='utf-8'))
+                # Prefer 'doc_id' (full filename), fallback to 'id' (short id)
+                if 'doc_id' in ws_meta:
+                    doc_ids = [ws_meta['doc_id']]
+                elif 'id' in ws_meta:
+                    doc_ids = [ws_meta['id']]
+            except Exception as e:
+                print(f"WARNING: Failed to read workset meta: {e}", file=sys.stderr)
+        else:
+            print(f"WARNING: Workset meta not found: {ws_meta_path}", file=sys.stderr)
+    elif args.doc_ids:
+        doc_ids = [d.strip() for d in args.doc_ids.split(',') if d.strip()]
+    
     print(f"Search Query: {args.query}")
     print(f"Product: {args.product}")
     print(f"Database: {db_path}")
@@ -350,6 +389,8 @@ def main():
         print(f"FAISS Index: {index_path}")
     else:
         print("FAISS Index: (not available, using FTS5-only)")
+    if doc_ids:
+        print(f"Filtered to doc_ids: {doc_ids}")
     print()
     
     # Open database
@@ -364,7 +405,8 @@ def main():
         index_path,
         mapping_path,
         args.limit,
-        args.product
+        args.product,
+        doc_ids
     )
     
     conn.close()
