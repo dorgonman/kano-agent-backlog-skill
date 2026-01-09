@@ -107,7 +107,9 @@ def resolve_process_definition(
 
 
 def derive_item_folders(process_def: Optional[dict]) -> list[str]:
-    fallback = ["epics", "features", "userstories", "tasks", "bugs"]
+    # Product layout uses singular folder names under `items/` (e.g. `items/feature/0000/...`).
+    # Plural folders (e.g. `items/features/`) are treated as legacy/migration artifacts.
+    fallback = ["epic", "feature", "userstory", "task", "bug"]
     if not process_def:
         return fallback
     work_item_types = process_def.get("work_item_types")
@@ -124,7 +126,7 @@ def derive_item_folders(process_def: Optional[dict]) -> list[str]:
         slug = normalize_slug(raw)
         if not slug:
             continue
-        folder = pluralize_slug(slug)
+        folder = slug
         if folder in seen:
             continue
         seen.add(folder)

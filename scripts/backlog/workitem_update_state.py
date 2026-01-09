@@ -307,10 +307,13 @@ def ensure_worklog(lines: List[str]) -> List[str]:
     return lines + ["", "# Worklog", ""]
 
 
-def append_worklog(lines: List[str], message: str, agent: str) -> List[str]:
+def append_worklog(lines: List[str], message: str, agent: str, model: Optional[str] = None) -> List[str]:
     lines = ensure_worklog(lines)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    entry = f"{timestamp} [agent={agent}] {message}"
+    if model:
+        entry = f"{timestamp} [agent={agent}] [model={model}] {message}"
+    else:
+        entry = f"{timestamp} [agent={agent}] {message}"
     lines.append(entry)
     return lines
 
@@ -402,7 +405,7 @@ def advance_parent_state(
     # Don't change owner when auto-syncing parent state
     lines = update_frontmatter(lines, target_state, updated_date, owner=None)
     message = f"Auto-sync from child {source_id} -> {target_state}."
-    lines = append_worklog(lines, message, agent)
+    lines = append_worklog(lines, message, agent, model=None)
     write_lines(parent.path, lines)
     parent.state = target_state
     return True
@@ -548,7 +551,7 @@ def main() -> int:
     lines = update_frontmatter(lines, target_state, updated_date, owner=owner_to_set)
 
     message = args.message or f"State -> {target_state}."
-    lines = append_worklog(lines, message, args.agent)
+    lines = append_worklog(lines, message, args.agent, model=args.model)
 
     write_lines(item_path, lines)
 

@@ -149,16 +149,22 @@ def extract_worklog_entries(body: str) -> List[Tuple[str, str]]:
     Extract worklog entries as (timestamp, text) tuples.
     Expected format in 'worklog' section:
       YYYY-MM-DD HH:MM [agent=...] ...
+      YYYY-MM-DD HH:MM [agent=...] [model=...] ...
     Returns: sorted list of (timestamp, entry_text)
     """
     entries = []
-    pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s+\[(agent=[^\]]+)\]\s+(.+)$'
+    pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s+\[agent=([^\]]+)\](?:\s+\[model=([^\]]+)\])?\s+(.+)$'
     
     for line in body.split("\n"):
         m = re.match(pattern, line.strip())
         if m:
-            timestamp, agent, text = m.groups()
-            entries.append((timestamp, f"{timestamp} [{agent}] {text}"))
+            timestamp, agent, model, text = m.groups()
+            # Reconstruct entry with model if present
+            if model:
+                full_entry = f"{timestamp} [agent={agent}] [model={model}] {text}"
+            else:
+                full_entry = f"{timestamp} [agent={agent}] {text}"
+            entries.append((timestamp, full_entry))
     
     entries.sort(key=lambda x: x[0])
     return entries

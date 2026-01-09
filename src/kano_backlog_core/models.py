@@ -88,25 +88,31 @@ class WorklogEntry(BaseModel):
 
     timestamp: str = Field(..., description="YYYY-MM-DD HH:MM format")
     agent: str
+    model: Optional[str] = Field(None, description="Model used by agent (e.g., claude-sonnet-4.5, gpt-5.1)")
     message: str
 
     @classmethod
     def parse(cls, line: str) -> Optional["WorklogEntry"]:
         """
-        Parse worklog line: "2026-01-07 19:59 [agent=copilot] Message"
+        Parse worklog line:
+        - "2026-01-07 19:59 [agent=copilot] Message"
+        - "2026-01-07 19:59 [agent=copilot] [model=claude-sonnet-4.5] Message"
 
         Returns:
             WorklogEntry or None if parse fails
         """
         import re
 
-        pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) \[agent=([^\]]+)\] (.+)$"
+        # Pattern with optional [model=...] tag
+        pattern = r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) \[agent=([^\]]+)\](?:\s+\[model=([^\]]+)\])? (.+)$"
         match = re.match(pattern, line.strip())
         if not match:
             return None
-        timestamp, agent, message = match.groups()
-        return cls(timestamp=timestamp, agent=agent, message=message)
+        timestamp, agent, model, message = match.groups()
+        return cls(timestamp=timestamp, agent=agent, model=model, message=message)
 
     def format(self) -> str:
-        """Format as: 2026-01-07 19:59 [agent=copilot] Message"""
+        """Format as: 2026-01-07 19:59 [agent=copilot] [model=claude-sonnet-4.5] Message"""
+        if self.model:
+            return f"{self.timestamp} [agent={self.agent}] [model={self.model}] {self.message}"
         return f"{self.timestamp} [agent={self.agent}] {self.message}"

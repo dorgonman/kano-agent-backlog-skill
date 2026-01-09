@@ -12,7 +12,12 @@ class AuditLog:
     """Manage worklog and file operation logs."""
 
     @staticmethod
-    def append_worklog(item: BacklogItem, message: str, agent: Optional[str] = None) -> None:
+    def append_worklog(
+        item: BacklogItem,
+        message: str,
+        agent: Optional[str] = None,
+        model: Optional[str] = None
+    ) -> None:
         """
         Add worklog entry to item (modifies in-place).
 
@@ -20,11 +25,12 @@ class AuditLog:
             item: BacklogItem to append worklog to
             message: Worklog message
             agent: Agent performing the action (optional)
+            model: Model used by agent (e.g., 'claude-sonnet-4.5', 'gpt-5.1') (optional)
         """
         now = datetime.now()
         timestamp = now.strftime("%Y-%m-%d %H:%M")
         if agent:
-            entry = WorklogEntry(timestamp=timestamp, agent=agent, message=message)
+            entry = WorklogEntry(timestamp=timestamp, agent=agent, model=model, message=message)
             item.worklog.append(entry.format())
         else:
             item.worklog.append(f"{timestamp} {message}")

@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Initialize local workset cache for a backlog item.")
     parser.add_argument("--item", required=True, help="Backlog item ref (id/uid/id@uidshort)")
     parser.add_argument("--agent", required=True, help="Agent name for worklog")
+    parser.add_argument("--model", help="Model used by agent (e.g., claude-sonnet-4.5, gpt-5.1)")
     parser.add_argument(
         "--cache-root",
         default="_kano/backlog/sandboxes/.cache",
@@ -118,8 +119,12 @@ def main() -> int:
     # Append worklog to item
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     message = f"Workset initialized: {ws_dir.relative_to(repo_root).as_posix()}"
+    if args.model:
+        worklog_entry = f"\n{timestamp} [agent={args.agent}] [model={args.model}] {message}\n"
+    else:
+        worklog_entry = f"\n{timestamp} [agent={args.agent}] {message}\n"
     with open(item.path, "a", encoding="utf-8") as f:
-        f.write(f"\n{timestamp} [agent={args.agent}] {message}\n")
+        f.write(worklog_entry)
 
     print(f"Initialized workset: {ws_dir}")
     return 0

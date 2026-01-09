@@ -189,10 +189,11 @@ def parse_worklog_entries(lines: List[str]) -> List[Dict[str, Optional[str]]]:
 
         raw_line = line.rstrip("\n")
         agent: Optional[str] = None
+        model: Optional[str] = None
         occurred_at: Optional[str] = None
         message = raw_line
 
-        # Best-effort: "YYYY-MM-DD HH:MM [agent=NAME] message"
+        # Best-effort: "YYYY-MM-DD HH:MM [agent=NAME] [model=NAME] message"
         parts = raw_line.split(" ", 2)
         if len(parts) >= 2 and len(parts[0]) == 10 and parts[0][4] == "-" and parts[0][7] == "-":
             # date only or date+time
@@ -203,16 +204,25 @@ def parse_worklog_entries(lines: List[str]) -> List[Dict[str, Optional[str]]]:
                 occurred_at = parts[0]
                 message = raw_line[len(parts[0]) :].lstrip()
 
+        # Extract [agent=...] tag
         if "[agent=" in message:
             prefix, rest = message.split("[agent=", 1)
             if "]" in rest:
                 agent = rest.split("]", 1)[0].strip()
                 message = (prefix + rest.split("]", 1)[1]).strip()
 
+        # Extract [model=...] tag (optional)
+        if "[model=" in message:
+            prefix, rest = message.split("[model=", 1)
+            if "]" in rest:
+                model = rest.split("]", 1)[0].strip()
+                message = (prefix + rest.split("]", 1)[1]).strip()
+
         entries.append(
             {
                 "occurred_at": occurred_at,
                 "agent": agent,
+                "model": model,
                 "message": message.strip(),
                 "raw_line": raw_line,
             }
@@ -551,13 +561,14 @@ def upsert_item(
         [(item.product, item.item_id, ref) for ref in item.decisions],
     )
     conn.executemany(
-        "INSERT INTO worklog_entries(product, item_id, occurred_at, agent, message, raw_line) VALUES(?, ?, ?, ?, ?, ?)",
+        "INSERT INTO worklog_entries(product, item_id, occurred_at, agent, model, message, raw_line) VALUES(?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 item.product,
                 item.item_id,
                 e.get("occurred_at"),
                 e.get("agent"),
+                e.get("model"),
                 e.get("message") or "",
                 e.get("raw_line") or "",
             )

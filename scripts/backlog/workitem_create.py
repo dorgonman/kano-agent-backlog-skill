@@ -29,11 +29,11 @@ from product_args import add_product_arguments, get_product_and_sandbox_flags  #
 
 
 TYPE_MAP = {
-    "epic": ("Epic", "EPIC", "epics"),
-    "feature": ("Feature", "FTR", "features"),
-    "userstory": ("UserStory", "USR", "userstories"),
-    "task": ("Task", "TSK", "tasks"),
-    "bug": ("Bug", "BUG", "bugs"),
+    "epic": ("Epic", "EPIC", ("epic", "epics")),
+    "feature": ("Feature", "FTR", ("feature", "features")),
+    "userstory": ("UserStory", "USR", ("userstory", "userstories")),
+    "task": ("Task", "TSK", ("task", "tasks")),
+    "bug": ("Bug", "BUG", ("bug", "bugs")),
 }
 
 
@@ -128,6 +128,25 @@ def normalize_nullable(value: Optional[str]) -> str:
     if trimmed.lower() in ("", "null", "none"):
         return "null"
     return trimmed
+
+
+def pick_items_subdir(items_root: Path, candidates: tuple[str, str]) -> str:
+    """
+    Choose the canonical type folder for the current backlog root.
+
+    - Multi-product layout prefers singular (e.g. items/feature/).
+    - Legacy layouts may still use plural (e.g. items/features/).
+    - If neither exists yet, return the canonical choice for that layout.
+    """
+    singular, plural = candidates
+    if (items_root / singular).exists():
+        return singular
+    if (items_root / plural).exists():
+        return plural
+    parts = items_root.as_posix().split("/")
+    if "products" in parts:
+        return singular
+    return plural
 
 
 def yaml_list(values: List[str]) -> str:
@@ -389,7 +408,7 @@ def main() -> int:
     if type_key not in TYPE_MAP:
         raise SystemExit(f"Unknown type: {args.type}. Use Epic, Feature, UserStory, Task, or Bug.")
 
-    type_label, type_code, type_folder = TYPE_MAP[type_key]
+    type_label, type_code, type_folder_candidates = TYPE_MAP[type_key]
 
     repo_root = Path.cwd().resolve()
     ctx = get_context(product_arg=args.product, repo_root=repo_root)
@@ -429,6 +448,7 @@ def main() -> int:
         print("Warning: non-Epic item without --parent.")
 
     items_root = product_root / "items"
+    type_folder = pick_items_subdir(items_root, type_folder_candidates)
     # Numbering must be unique within the product even during migrations where
     # legacy and new folder layouts can coexist (e.g. `items/feature/` vs `items/features/`).
     # Scan the entire items root for this type code to avoid ID collisions.

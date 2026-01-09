@@ -14,6 +14,7 @@ def append(
     item_id: str = typer.Argument(..., help="Display ID, e.g., KABSD-TSK-0001"),
     message: str = typer.Option(..., help="Worklog message to append"),
     agent: str = typer.Option("cli", help="Agent name for audit/worklog"),
+    model: str | None = typer.Option(None, help="Model used by agent (e.g., claude-sonnet-4.5, gpt-5.1)"),
     product: str | None = typer.Option(None, help="Product name under _kano/backlog/products"),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
@@ -27,7 +28,7 @@ def append(
     item_path = find_item_path_by_id(store.items_root, item_id)
     item = store.read(item_path)
 
-    AuditLog.append_worklog(item, message, agent=agent)
+    AuditLog.append_worklog(item, message, agent=agent, model=model)
     store.write(item)
 
     if output_format == "json":

@@ -54,9 +54,12 @@ decisions: []
 
 ```
 YYYY-MM-DD HH:MM [agent=<AGENT_NAME>] <message>
+YYYY-MM-DD HH:MM [agent=<AGENT_NAME>] [model=<MODEL_NAME>] <message>
 ```
 
 **Agent Identity**: Provide the actual runtime agent identity explicitly in Worklog entries; do not copy placeholders or examples. See `SKILL.md` for details.
+
+**Model (Optional)**: When available, include the model used by the agent (e.g., `claude-sonnet-4.5`, `gpt-5.1`, `gemini-3.0-high`). This provides additional context for audit trails and debugging.
 
 ## ADR template
 
