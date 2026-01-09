@@ -101,41 +101,59 @@ class BacklogIndex:
             conn.close()
 
     def _scan_files(self):
-        items_dir = self.root / "items"
-        if not items_dir.exists():
-            return
-            
-        for f in items_dir.rglob("*.md"):
-            try:
-                content = f.read_text(encoding="utf-8")
-                fm, _, _ = parse_frontmatter(content)
-                
-                if not fm or 'id' not in fm:
-                    continue
-                
-                uid = fm.get('uid', '')
-                uidshort = uid.replace("-", "")[:8] if uid else ""
-                
-                # Extract product from path
-                product = self._extract_product_from_path(f)
-                
-                item = BacklogItem(
-                    uid=uid,
-                    id=fm['id'],
-                    uidshort=uidshort,
-                    type=fm.get('type', 'Unknown'),
-                    title=fm.get('title', ''),
-                    state=fm.get('state', 'Unknown'),
-                    path=f,
-                    created=str(fm.get('created', '')),
-                    updated=str(fm.get('updated', '')),
-                    product=product,
-                    frontmatter=fm
-                )
-                self._add_to_index(item)
-                
-            except Exception as e:
-                print(f"Warning: Failed to index {f}: {e}")
+        """Fallback file scan when SQLite index is unavailable.
+
+        Scans legacy path `_kano/backlog/items/` plus product and sandbox
+        paths under `_kano/backlog/products/<product>/items/` and
+        `_kano/backlog/sandboxes/<product>/items/`.
+        """
+
+        candidate_roots = [self.root / "items"]
+        products_root = self.root / "products"
+        sandboxes_root = self.root / "sandboxes"
+
+        if products_root.exists():
+            for prod in products_root.iterdir():
+                candidate_roots.append(prod / "items")
+        if sandboxes_root.exists():
+            for prod in sandboxes_root.iterdir():
+                candidate_roots.append(prod / "items")
+
+        for items_dir in candidate_roots:
+            if not items_dir.exists():
+                continue
+
+            for f in items_dir.rglob("*.md"):
+                try:
+                    content = f.read_text(encoding="utf-8")
+                    fm, _, _ = parse_frontmatter(content)
+
+                    if not fm or 'id' not in fm:
+                        continue
+
+                    uid = fm.get('uid', '')
+                    uidshort = uid.replace("-", "")[:8] if uid else ""
+
+                    # Extract product from path
+                    product = self._extract_product_from_path(f)
+
+                    item = BacklogItem(
+                        uid=uid,
+                        id=fm['id'],
+                        uidshort=uidshort,
+                        type=fm.get('type', 'Unknown'),
+                        title=fm.get('title', ''),
+                        state=fm.get('state', 'Unknown'),
+                        path=f,
+                        created=str(fm.get('created', '')),
+                        updated=str(fm.get('updated', '')),
+                        product=product,
+                        frontmatter=fm
+                    )
+                    self._add_to_index(item)
+
+                except Exception as e:
+                    print(f"Warning: Failed to index {f}: {e}")
 
     def _add_to_index(self, item: BacklogItem):
         # Index by UID

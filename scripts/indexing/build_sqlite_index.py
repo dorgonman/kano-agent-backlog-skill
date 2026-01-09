@@ -404,6 +404,29 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
             continue
         
         if version > current_version:
+            # Special-case migration 001: add source_path if missing.
+            if version == 1:
+                has_source_path = False
+                try:
+                    rows = conn.execute("PRAGMA table_info(items)").fetchall()
+                    for r in rows:
+                        # PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+                        if len(r) > 1 and str(r[1]).lower() == "source_path":
+                            has_source_path = True
+                            break
+                except sqlite3.OperationalError:
+                    has_source_path = False
+
+                if has_source_path:
+                    print("Skipping migration 1 (source_path already exists); advancing schema_version to 1")
+                    conn.execute(
+                        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES(?, ?)",
+                        ("schema_version", str(version))
+                    )
+                    conn.commit()
+                    current_version = version
+                    continue
+
             print(f"Applying migration {version}: {migration_file.name}")
             conn.executescript(migration_file.read_text(encoding="utf-8"))
             conn.execute(
