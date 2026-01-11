@@ -30,6 +30,7 @@ from .index import build_index, refresh_index
 from .demo import seed_demo, DemoSeedResult
 from .persona import generate_summary, generate_report, PersonaSummaryResult, PersonaReportResult
 from .sandbox import init_sandbox, SandboxInitResult
+from .validate import validate_uids, UidValidationResult, UidViolation
 
 __all__ = [
     # init
@@ -67,4 +68,8 @@ __all__ = [
     # sandbox
     "init_sandbox",
     "SandboxInitResult",
+    # validation
+    "validate_uids",
+    "UidValidationResult",
+    "UidViolation",
 ]
