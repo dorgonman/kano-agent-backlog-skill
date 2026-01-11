@@ -52,7 +52,7 @@ Use this skill to:
 - Never include secrets in backlog files or logs.
 - Language: backlog and documentation content must be English-only (no CJK), to keep parsing and cross-agent collaboration deterministic.
 - Agent Identity: In Worklog and audit logs, use your own identity (e.g., `[agent=antigravity]`), never copy `[agent=codex]` blindly.
-- Worklog-writing scripts require an explicit `--agent` value; there is no default.
+- Always provide an explicit `--agent` value for auditability (some commands currently default to `cli`, but do not rely on it).
 - **Agent Identity Protocol**: Supply `--agent <ID>` with your real product name (e.g., `cursor`, `copilot`, `windsurf`, `antigravity`).
   - **Forbidden (Placeholders)**: `auto`, `user`, `assistant`, `<AGENT_NAME>`, `$AGENT_NAME`.
 - File operations for backlog/skill artifacts must go through the `kano` CLI
@@ -200,27 +200,54 @@ If the backlog structure is missing, propose creation and wait for user approval
 
 `scripts/` now exposes a single executable: `scripts/kano`. All supported operations flow through that Typer CLI:
 
-- `python skills/kano-agent-backlog-skill/scripts/kano doctor [--product <name>] [--backlog-root <path>]`
+### Core commands
+
+- `python skills/kano-agent-backlog-skill/scripts/kano doctor [--product <name>] [--format plain|json]`
   - Verifies Python prerequisites, backlog scaffold, and CLI importability.
-- `python skills/kano-agent-backlog-skill/scripts/kano view refresh --agent <id> [--product <name>] [--backlog-root <path>]`
-  - Regenerates canonical dashboards (Active/New/Done) and persona outputs once implemented.
-- `python skills/kano-agent-backlog-skill/scripts/kano item read|validate --product <name> <item-id>`
-  - Reads or validates a single work item directly from the canonical store.
+- `python skills/kano-agent-backlog-skill/scripts/kano backlog init --product <name> --agent <id> [--backlog-root <path>] [options]`
+  - Creates the canonical backlog scaffold (supports multi-product layouts under `_kano/backlog/products/<product>/`).
+- `python skills/kano-agent-backlog-skill/scripts/kano view refresh --agent <id> [--backlog-root <path>] [--product <name>]`
+  - Regenerates canonical dashboards (Active/New/Done).
+
+### Item operations
+
+- `python skills/kano-agent-backlog-skill/scripts/kano item read <item-id> [--product <name>] [--format plain|json]`
+  - Reads a single work item directly from the canonical store.
+- `python skills/kano-agent-backlog-skill/scripts/kano item validate <item-id> [--product <name>]`
+  - Validates a single work item against the Ready gate.
 - `python skills/kano-agent-backlog-skill/scripts/kano item create --agent <id> --type task --title "..." [options]`
   - Creates a new work item using the ops layer (alias `item create-v2` kept for compatibility).
 - `python skills/kano-agent-backlog-skill/scripts/kano item update-state <item-ref> --state Ready --agent <id> [--message ...]`
   - Updates state, syncs parents, and refreshes dashboards in one call.
-- `python skills/kano-agent-backlog-skill/scripts/kano state transition <item-id> --action start --agent <id>`
+
+### State and worklog
+
+- `python skills/kano-agent-backlog-skill/scripts/kano state transition <item-id> --action start [--agent <id>] [--product <name>]`
   - Runs declarative state-machine transitions (`propose`, `ready`, `start`, etc.).
-- `python skills/kano-agent-backlog-skill/scripts/kano worklog append <item-id> --message "..." --agent <id>`
+- `python skills/kano-agent-backlog-skill/scripts/kano worklog append <item-id> --message "..." [--agent <id>] [--product <name>]`
   - Appends a structured worklog entry (with optional model attribution) and persists it.
 
-Additional subcommands will land here (e.g., backlog initialization, summaries) instead of new standalone scripts.
+### Backlog administration (nested under `backlog`)
+
+- `python skills/kano-agent-backlog-skill/scripts/kano backlog index build [--product <name>] [--force]`
+  - Builds the SQLite index from markdown items (creates `_index/backlog.sqlite3`).
+- `python skills/kano-agent-backlog-skill/scripts/kano backlog index refresh [--product <name>]`
+  - Refreshes the SQLite index (MVP: full rebuild).
+- `python skills/kano-agent-backlog-skill/scripts/kano backlog demo seed --product <name> --agent <id>`
+  - Seeds demo data (1 epic → 1 feature → 3 tasks) for testing/demos.
+- `python skills/kano-agent-backlog-skill/scripts/kano backlog persona summary --product <name> --agent <id> [--limit N]`
+  - Generates a persona activity summary from worklog entries (saves to `artifacts/`).
+- `python skills/kano-agent-backlog-skill/scripts/kano backlog persona report --product <name> --agent <id>`
+  - Generates a persona state distribution report (saves to `artifacts/`).
+- `python skills/kano-agent-backlog-skill/scripts/kano backlog sandbox init <name> --product <source> --agent <id> [--force]`
+  - Scaffolds an isolated sandbox environment under `_kano/backlog_sandbox/<name>/` mirroring the source product structure.
+
+More subcommands may land here over time; prefer extending `scripts/kano` instead of adding standalone scripts.
 
 ## State update helper
 
 - Use `python skills/kano-agent-backlog-skill/scripts/kano item update-state ...` to update state + append Worklog.
 - Prefer `--action` on `kano state transition` for the common transitions (`start`, `ready`, `review`, `done`, `block`, `drop`).
-- When moving to Ready, the CLI validates required sections unless `--force` is set.
+- Use `python skills/kano-agent-backlog-skill/scripts/kano item validate <item-id>` to check the Ready gate explicitly.
 ---
 END_OF_SKILL_SENTINEL
