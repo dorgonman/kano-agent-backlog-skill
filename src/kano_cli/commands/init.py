@@ -7,9 +7,8 @@ import typer
 from ..util import ensure_core_on_path
 
 app = typer.Typer(help="Backlog administration commands")
-legacy_app = typer.Typer(help="Initialization helpers (legacy alias)")
 
-__all__ = ["app", "legacy_app"]
+__all__ = ["app"]
 
 
 @app.command("init")
@@ -120,15 +119,4 @@ def backlog(
 			typer.echo(f"⚠️  Demo seeding failed: {exc}", err=True)
 
 
-legacy_app.command("backlog")(backlog)
-
-
-@legacy_app.callback(invoke_without_command=True)
-def _legacy_notice(ctx: typer.Context) -> None:
-	if ctx.invoked_subcommand:
-		typer.secho(
-			"⚠️ 'kano init <command>' is deprecated; use 'kano backlog <command>' instead.",
-			fg=typer.colors.YELLOW,
-			err=True,
-		)
 

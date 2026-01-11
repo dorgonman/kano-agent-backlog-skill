@@ -256,16 +256,24 @@ def update_state(
     else:
         # It's an ID or UID - need to search for it
         if backlog_root is None:
-            # Find backlog root
-            current = Path.cwd()
-            while current != current.parent:
-                backlog_check = current / "_kano" / "backlog"
-                if backlog_check.exists():
-                    backlog_root = backlog_check
-                    break
-                current = current.parent
-            if backlog_root is None:
-                raise ValueError("Cannot find backlog root")
+            # Prefer product-aware context resolution
+            if product:
+                try:
+                    ctx = ConfigLoader.from_path(Path.cwd(), product=product)
+                    backlog_root = ctx.product_root
+                except Exception as e:
+                    raise ValueError(f"Cannot resolve product root for '{product}': {e}")
+            else:
+                # Fallback: try single-product layout at repo root
+                current = Path.cwd()
+                while current != current.parent:
+                    backlog_check = current / "_kano" / "backlog"
+                    if backlog_check.exists():
+                        backlog_root = backlog_check
+                        break
+                    current = current.parent
+                if backlog_root is None:
+                    raise ValueError("Cannot find backlog root")
         
         # Search for item by ID in items/
         items_root = backlog_root / "items"
@@ -362,16 +370,23 @@ def validate_ready(
     else:
         # It's an ID - search for it
         if backlog_root is None:
-            # Find backlog root
-            current = Path.cwd()
-            while current != current.parent:
-                backlog_check = current / "_kano" / "backlog"
-                if backlog_check.exists():
-                    backlog_root = backlog_check
-                    break
-                current = current.parent
-            if backlog_root is None:
-                raise ValueError("Cannot find backlog root")
+            # Prefer product-aware context resolution
+            if product:
+                try:
+                    ctx = ConfigLoader.from_path(Path.cwd(), product=product)
+                    backlog_root = ctx.product_root
+                except Exception as e:
+                    raise ValueError(f"Cannot resolve product root for '{product}': {e}")
+            else:
+                current = Path.cwd()
+                while current != current.parent:
+                    backlog_check = current / "_kano" / "backlog"
+                    if backlog_check.exists():
+                        backlog_root = backlog_check
+                        break
+                    current = current.parent
+                if backlog_root is None:
+                    raise ValueError("Cannot find backlog root")
         
         # Search for item by ID
         items_root = backlog_root / "items"

@@ -28,7 +28,6 @@ from .commands import validate as validate_cmd  # noqa: E402
 from .commands.doctor import doctor as doctor_fn  # noqa: E402
 
 app.add_typer(backlog_cmd.app, name="backlog", help="Backlog administration commands")
-app.add_typer(backlog_cmd.legacy_app, name="init", help="Initialization helpers (legacy alias)")
 app.add_typer(item_cmd.app, name="item", help="Item operations")
 app.add_typer(state_cmd.app, name="state", help="State transitions")
 app.add_typer(worklog_cmd.app, name="worklog", help="Worklog operations")

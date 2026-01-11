@@ -167,32 +167,51 @@ def create(
     )
 
 
-@app.command(name="create-v2")
-def create_v2(
-    item_type: str = typer.Option(..., "--type", help="epic|feature|userstory|task|bug"),
-    title: str = typer.Option(..., "--title", help="Work item title"),
-    parent: str | None = typer.Option(None, "--parent", help="Parent item ID (optional)"),
-    priority: str = typer.Option("P2", "--priority", help="Priority (P0-P4, default: P2)"),
-    area: str = typer.Option("general", "--area", help="Area tag"),
-    iteration: str | None = typer.Option(None, "--iteration", help="Iteration name"),
-    tags: str = typer.Option("", "--tags", help="Comma-separated tags"),
-    agent: str = typer.Option(..., "--agent", help="Agent name (for audit trail)"),
+@app.command(name="set-ready")
+def set_ready(
+    item_id: str = typer.Argument(..., help="Display ID, e.g., KABSD-TSK-0001"),
+    context: str | None = typer.Option(None, "--context", help="# Context body"),
+    goal: str | None = typer.Option(None, "--goal", help="# Goal body"),
+    approach: str | None = typer.Option(None, "--approach", help="# Approach body"),
+    acceptance_criteria: str | None = typer.Option(
+        None,
+        "--acceptance-criteria",
+        help="# Acceptance Criteria body",
+    ),
+    risks: str | None = typer.Option(
+        None,
+        "--risks",
+        help="# Risks / Dependencies body",
+    ),
     product: str | None = typer.Option(None, "--product", help="Product name"),
-    output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
-    """Compatibility alias for the ops-backed create command."""
-    _run_create_command(
-        item_type=item_type,
-        title=title,
-        parent=parent,
-        priority=priority,
-        area=area,
-        iteration=iteration,
-        tags=tags,
-        agent=agent,
-        product=product,
-        output_format=output_format,
-    )
+    """Set Ready-gate body sections for an existing item."""
+    ensure_core_on_path()
+    from kano_backlog_core.canonical import CanonicalStore
+
+    product_root = resolve_product_root(product)
+    store = CanonicalStore(product_root)
+    item_path = find_item_path_by_id(store.items_root, item_id)
+    item = store.read(item_path)
+
+    if context is not None:
+        item.context = context
+    if goal is not None:
+        item.goal = goal
+    if approach is not None:
+        item.approach = approach
+    if acceptance_criteria is not None:
+        item.acceptance_criteria = acceptance_criteria
+    if risks is not None:
+        item.risks = risks
+
+    try:
+        store.write(item)
+    except Exception as exc:
+        typer.echo(f"❌ Failed to write item: {exc}", err=True)
+        raise typer.Exit(2)
+
+    typer.echo(f"✓ Updated Ready fields for {item.id}")
 
 
 @app.command(name="update-state")
@@ -211,9 +230,19 @@ def update_state_command(
     from kano_backlog_core.models import ItemState
     from kano_backlog_ops.workitem import update_state as ops_update_state
 
-    try:
-        item_state = ItemState(state.upper() if state.lower() == "new" else state.title())
-    except ValueError:
+    normalized = state.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+    state_map = {
+        "new": ItemState.NEW,
+        "proposed": ItemState.PROPOSED,
+        "ready": ItemState.READY,
+        "inprogress": ItemState.IN_PROGRESS,
+        "review": ItemState.REVIEW,
+        "done": ItemState.DONE,
+        "blocked": ItemState.BLOCKED,
+        "dropped": ItemState.DROPPED,
+    }
+    item_state = state_map.get(normalized)
+    if item_state is None:
         typer.echo(
             "❌ Invalid state. Use: New, Proposed, Ready, InProgress, Review, Done, Blocked, Dropped",
             err=True,

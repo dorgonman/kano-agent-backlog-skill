@@ -27,7 +27,8 @@ The `references/` folder is intentionally split into multiple small files so an 
 
 ### Item operations
 - `kano item read|validate`: inspect canonical records
-- `kano item create`: create items with Ready-gate aware defaults (alias `create-v2` for compatibility)
+- `kano item create`: create items
+- `kano item set-ready`: set Ready-gate body sections (Context/Goal/Approach/Acceptance/Risks)
 - `kano item update-state`: state transitions + worklog append + optional dashboard refresh
 
 ### State and worklog

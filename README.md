@@ -34,12 +34,12 @@ Goal: convert “evaporating context” into **searchable, linkable, auditable**
 - `references/templates.md`: work item / ADR templates
 - `references/workflow.md`: SOP (when to create items, when to record decisions, how to converge)
 - `references/views.md`: Obsidian view patterns (Dataview + Bases)
-- `scripts/kano`: Typer-based CLI entrypoint (subcommands: `init`, `item`, `state`, `worklog`, `view`, `doctor`)
+- `scripts/kano`: Typer-based CLI entrypoint (subcommands: `backlog`, `item`, `state`, `worklog`, `view`, `doctor`)
 - `src/kano_backlog_core`: canonical models/storage helpers
 - `src/kano_backlog_ops`: use-cases (create/update/view)
 - `src/kano_cli`: CLI wiring (commands + utilities)
 
-Note: backlog administration commands are grouped under `kano backlog ...` (index/demo/persona/sandbox). The legacy alias `kano init ...` remains for compatibility.
+Note: backlog administration commands are grouped under `kano backlog ...` (index/demo/persona/sandbox/validate).
 
 Optionally, create `_kano/backlog/` in your project repo to store items, ADRs, views, and helper scripts as the system of record.
 
