@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 from datetime import date
+import re
+
+from kano_backlog_core.audit import AuditLog
+from kano_backlog_core.config import ConfigLoader
+
+from .item_utils import slugify
 
 
 @dataclass
@@ -58,8 +64,98 @@ def create_adr(
         ValueError: If title is empty
         FileNotFoundError: If backlog not initialized
     """
-    # TODO: Implement - currently delegates to adr_init.py
-    raise NotImplementedError("create_adr not yet implemented - use adr_init.py")
+
+    if not title or not title.strip():
+        raise ValueError("ADR title cannot be empty")
+
+    if backlog_root is not None:
+        backlog_root = backlog_root.resolve()
+        products_root = backlog_root / "products"
+        product_root = (products_root / product) if products_root.exists() else backlog_root
+        if not product_root.exists():
+            raise FileNotFoundError(f"Product root does not exist: {product_root}")
+    else:
+        context = ConfigLoader.from_path(Path.cwd(), product=product)
+        product_root = context.product_root
+
+    decisions_dir = product_root / "decisions"
+    if not decisions_dir.exists() or not decisions_dir.is_dir():
+        raise FileNotFoundError(f"Decisions directory not found: {decisions_dir}")
+
+    next_number = _find_next_adr_number(decisions_dir)
+    adr_id = f"ADR-{next_number:04d}"
+    adr_slug = slugify(title)
+    adr_path = decisions_dir / f"{adr_id}_{adr_slug}.md"
+
+    if adr_path.exists():
+        raise FileExistsError(f"ADR already exists: {adr_path}")
+
+    related_items = list(related_items or [])
+    today = date.today().isoformat()
+
+    related_items_yaml = _yaml_list_inline(related_items)
+    content = (
+        "---\n"
+        f"id: {adr_id}\n"
+        f"title: \"{_escape_yaml_string(title.strip())}\"\n"
+        f"status: {status}\n"
+        f"date: {today}\n"
+        f"related_items: {related_items_yaml}\n"
+        "supersedes: null\n"
+        "superseded_by: null\n"
+        "---\n\n"
+        "# Decision\n\n"
+        "# Context\n\n"
+        "# Options Considered\n\n"
+        "# Pros / Cons\n\n"
+        "# Consequences\n\n"
+        "# Follow-ups\n"
+    )
+
+    decisions_dir.mkdir(parents=True, exist_ok=True)
+    adr_path.write_text(content, encoding="utf-8")
+
+    AuditLog.log_file_operation(
+        operation="create",
+        path=str(adr_path).replace("\\\\", "/"),
+        tool="kano backlog adr create",
+        agent=agent,
+        metadata={
+            "adr_id": adr_id,
+            "title": title.strip(),
+            "product": product,
+            "status": status,
+            "related_items": related_items,
+        },
+    )
+
+    return CreateADRResult(id=adr_id, title=title.strip(), path=adr_path)
+
+
+def _find_next_adr_number(decisions_dir: Path) -> int:
+    pattern = re.compile(r"^ADR-(\\d{4})")
+    max_num = 0
+    for path in decisions_dir.glob("ADR-*.md"):
+        match = pattern.match(path.name)
+        if not match:
+            continue
+        try:
+            num = int(match.group(1))
+        except ValueError:
+            continue
+        max_num = max(max_num, num)
+    return max_num + 1
+
+
+def _yaml_list_inline(values: List[str]) -> str:
+    if not values:
+        return "[]"
+    escaped = [f"\"{_escape_yaml_string(v)}\"" for v in values]
+    return f"[{', '.join(escaped)}]"
+
+
+def _escape_yaml_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', "\\\"")
 
 
 def list_adrs(

@@ -25,6 +25,7 @@ from .commands import demo as demo_cmd  # noqa: E402
 from .commands import persona as persona_cmd  # noqa: E402
 from .commands import sandbox as sandbox_cmd  # noqa: E402
 from .commands import validate as validate_cmd  # noqa: E402
+from .commands import adr as adr_cmd  # noqa: E402
 from .commands.doctor import doctor as doctor_fn  # noqa: E402
 
 app.add_typer(backlog_cmd.app, name="backlog", help="Backlog administration commands")
@@ -38,6 +39,7 @@ backlog_cmd.app.add_typer(demo_cmd.app, name="demo", help="Demo data operations"
 backlog_cmd.app.add_typer(persona_cmd.app, name="persona", help="Persona activity operations")
 backlog_cmd.app.add_typer(sandbox_cmd.app, name="sandbox", help="Sandbox environment operations")
 backlog_cmd.app.add_typer(validate_cmd.app, name="validate", help="Backlog validation helpers")
+backlog_cmd.app.add_typer(adr_cmd.app, name="adr", help="ADR operations")
 app.command(name="doctor")(doctor_fn)
 
 
