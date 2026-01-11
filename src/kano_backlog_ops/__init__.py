@@ -28,6 +28,8 @@ from .view import refresh_dashboards, generate_view
 from .workset import init_workset, refresh_workset, get_next_item, promote_item
 from .index import build_index, refresh_index
 from .demo import seed_demo, DemoSeedResult
+from .persona import generate_summary, generate_report, PersonaSummaryResult, PersonaReportResult
+from .sandbox import init_sandbox, SandboxInitResult
 
 __all__ = [
     # init
@@ -57,4 +59,12 @@ __all__ = [
     # demo
     "seed_demo",
     "DemoSeedResult",
+    # persona
+    "generate_summary",
+    "generate_report",
+    "PersonaSummaryResult",
+    "PersonaReportResult",
+    # sandbox
+    "init_sandbox",
+    "SandboxInitResult",
 ]

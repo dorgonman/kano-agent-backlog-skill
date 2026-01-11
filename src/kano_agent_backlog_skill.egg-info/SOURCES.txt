@@ -23,6 +23,7 @@ src/kano_backlog_ops/index.py
 src/kano_backlog_ops/init.py
 src/kano_backlog_ops/item_templates.py
 src/kano_backlog_ops/item_utils.py
+src/kano_backlog_ops/persona.py
 src/kano_backlog_ops/py.typed
 src/kano_backlog_ops/view.py
 src/kano_backlog_ops/workitem.py
@@ -37,6 +38,7 @@ src/kano_cli/commands/doctor.py
 src/kano_cli/commands/index.py
 src/kano_cli/commands/init.py
 src/kano_cli/commands/item.py
+src/kano_cli/commands/persona.py
 src/kano_cli/commands/state.py
 src/kano_cli/commands/view.py
 src/kano_cli/commands/worklog.py
