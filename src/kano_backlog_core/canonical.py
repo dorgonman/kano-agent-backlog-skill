@@ -2,7 +2,6 @@
 
 import re
 import sys
-import uuid
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import date
@@ -33,7 +32,7 @@ class CanonicalStore:
     TYPE_ABBREV = {
         ItemType.EPIC: "EPIC",
         ItemType.FEATURE: "FTR",
-        ItemType.USER_STORY: "US",
+        ItemType.USER_STORY: "USR",
         ItemType.TASK: "TSK",
         ItemType.BUG: "BUG",
     }
@@ -291,12 +290,11 @@ class CanonicalStore:
                     f"Invalid id format: {item.id} (expected <PREFIX>-(EPIC|FTR|USR|TSK|BUG)-<NNNN>)"
                 )
 
-        # Validate UID format (accept UUIDv4/v7; prefer UUIDv7 going forward)
+        # Validate UID format (strict UUIDv7)
         if item.uid:
-            try:
-                uuid.UUID(str(item.uid))
-            except Exception:
-                errors.append(f"Invalid uid format: {item.uid} (expected UUID)")
+            uuid_pattern_v7 = r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            if not re.match(uuid_pattern_v7, item.uid):
+                errors.append(f"Invalid uid format: {item.uid} (expected UUIDv7)")
 
         # Validate dates (ISO format)
         date_pattern = r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$"
