@@ -66,7 +66,8 @@ class StateMachine:
         item: BacklogItem, 
         action: StateAction, 
         agent: Optional[str] = None, 
-        message: Optional[str] = None
+        message: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> BacklogItem:
         """
         Execute state transition with side effects.
@@ -112,7 +113,10 @@ class StateMachine:
             worklog_text = state_msg
         
         if agent:
-            worklog_line = f"{timestamp} [agent={agent}] {worklog_text}"
+            if model:
+                worklog_line = f"{timestamp} [agent={agent}] [model={model}] {worklog_text}"
+            else:
+                worklog_line = f"{timestamp} [agent={agent}] {worklog_text}"
         else:
             worklog_line = f"{timestamp} {worklog_text}"
         

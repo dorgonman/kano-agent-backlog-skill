@@ -124,7 +124,7 @@ def temp_backlog():
 
 
 valid_topic_name_strategy = st.from_regex(
-    r"^[a-zA-Z][a-zA-Z0-9_-]{0,30}$", fullmatch=True
+    r"^[a-z][a-z0-9_-]{0,30}$", fullmatch=True
 ).filter(lambda x: x.lower() not in RESERVED_NAMES)
 
 invalid_topic_name_strategy = st.one_of(

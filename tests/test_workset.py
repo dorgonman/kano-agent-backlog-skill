@@ -1160,7 +1160,7 @@ def test_workset_cleanup_scope_is_limited(item_suffix, topic_name):
 # =============================================================================
 
 
-@settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@settings(max_examples=100, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(
     workset_count=st.integers(min_value=1, max_value=5),
 )

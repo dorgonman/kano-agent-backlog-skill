@@ -53,6 +53,8 @@ Use this skill to:
 - Language: backlog and documentation content must be English-only (no CJK), to keep parsing and cross-agent collaboration deterministic.
 - Agent Identity: In Worklog and audit logs, use your own identity (e.g., `[agent=antigravity]`), never copy `[agent=codex]` blindly.
 - Always provide an explicit `--agent` value for auditability (some commands currently default to `cli`, but do not rely on it).
+- Model attribution (optional but preferred): provide `--model <name>` (or env `KANO_AGENT_MODEL` / `KANO_MODEL`) when it is known deterministically.
+  - Do not guess model names; if unknown, record `unknown`.
 - **Agent Identity Protocol**: Supply `--agent <ID>` with your real product name (e.g., `cursor`, `copilot`, `windsurf`, `antigravity`).
   - **Forbidden (Placeholders)**: `auto`, `user`, `assistant`, `<AGENT_NAME>`, `$AGENT_NAME`.
 - File operations for backlog/skill artifacts must go through the `kano-backlog` CLI

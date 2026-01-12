@@ -224,6 +224,7 @@ def update_state(
     *,
     agent: str,
     message: Optional[str] = None,
+    model: Optional[str] = None,
     product: Optional[str] = None,
     sync_parent: bool = True,
     refresh_dashboards: bool = True,
@@ -318,7 +319,7 @@ def update_state(
     
     # Append worklog
     worklog_message = message or f"State -> {new_state.value}."
-    lines = worklog.append_worklog_entry(lines, worklog_message, agent)
+    lines = worklog.append_worklog_entry(lines, worklog_message, agent, model=model)
     
     # Write updated file
     try:

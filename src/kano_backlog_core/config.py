@@ -1,9 +1,23 @@
-"""Configuration and context resolution for kano-backlog."""
+"""Configuration and context resolution for kano-backlog.
+
+This module resolves platform/product roots and provides an "effective config"
+view by layering config sources.
+
+Layer order (later wins):
+1) _kano/backlog/_shared/defaults.json
+2) _kano/backlog/products/<product>/_config/config.json
+3) _kano/backlog/.cache/worksets/topics/<topic>/config.json (optional)
+4) _kano/backlog/.cache/worksets/items/<item_id>/config.json (optional)
+
+Topic selection is agent-scoped via active topic marker:
+_kano/backlog/.cache/worksets/active_topic.<agent>.txt
+"""
 
 import json
 from pathlib import Path
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from .errors import ConfigError
 
@@ -27,8 +41,150 @@ class ConfigLoader:
     """Load and resolve backlog configuration."""
 
     @staticmethod
+    def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = dict(base)
+        for key, value in overlay.items():
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
+                result[key] = ConfigLoader._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    @staticmethod
+    def _read_json_optional(path: Path) -> dict[str, Any]:
+        if not path.exists():
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ConfigError(f"Config JSON must be an object: {path}")
+            return data
+        except json.JSONDecodeError as e:
+            raise ConfigError(f"Invalid JSON in {path}: {e}")
+        except ConfigError:
+            raise
+        except Exception as e:
+            raise ConfigError(f"Failed to load config from {path}: {e}")
+
+    @staticmethod
+    def _normalize_product_name(product: str) -> str:
+        return product.strip()
+
+    @staticmethod
+    def _list_products(backlog_root: Path) -> list[str]:
+        products_dir = backlog_root / "products"
+        if not products_dir.exists():
+            return []
+        return sorted([p.name for p in products_dir.iterdir() if p.is_dir()])
+
+    @staticmethod
+    def get_cache_root(backlog_root: Path) -> Path:
+        return backlog_root / ".cache" / "worksets"
+
+    @staticmethod
+    def get_topics_root(backlog_root: Path) -> Path:
+        # Scheme B: durable, shareable topic roots live under _kano/backlog/topics/
+        # Raw materials inside a topic should be treated as cache via .gitignore/TTL.
+        return backlog_root / "topics"
+
+    @staticmethod
+    def get_topic_path(backlog_root: Path, topic_name: str) -> Path:
+        return ConfigLoader.get_topics_root(backlog_root) / topic_name
+
+    @staticmethod
+    def get_worksets_items_root(backlog_root: Path) -> Path:
+        return ConfigLoader.get_cache_root(backlog_root) / "items"
+
+    @staticmethod
+    def get_workset_path(backlog_root: Path, item_id: str) -> Path:
+        return ConfigLoader.get_worksets_items_root(backlog_root) / item_id
+
+    @staticmethod
+    def get_active_topic(backlog_root: Path, agent: str) -> Optional[str]:
+        if not agent or not agent.strip():
+            return None
+        marker = ConfigLoader.get_cache_root(backlog_root) / f"active_topic.{agent}.txt"
+        if not marker.exists():
+            return None
+        topic = marker.read_text(encoding="utf-8").strip()
+        return topic or None
+
+    @staticmethod
+    def load_product_config(product_root: Path) -> dict[str, Any]:
+        return ConfigLoader._read_json_optional(product_root / "_config" / "config.json")
+
+    @staticmethod
+    def load_topic_overrides(
+        backlog_root: Path,
+        *,
+        topic: Optional[str] = None,
+        agent: Optional[str] = None,
+    ) -> dict[str, Any]:
+        topic_name = (topic or "").strip() or (ConfigLoader.get_active_topic(backlog_root, agent or "") or "")
+        if not topic_name:
+            return {}
+        return ConfigLoader._read_json_optional(ConfigLoader.get_topic_path(backlog_root, topic_name) / "config.json")
+
+    @staticmethod
+    def load_workset_overrides(backlog_root: Path, *, item_id: Optional[str] = None) -> dict[str, Any]:
+        if not item_id:
+            return {}
+        return ConfigLoader._read_json_optional(ConfigLoader.get_workset_path(backlog_root, item_id) / "config.json")
+
+    @staticmethod
+    def _resolve_product_name(
+        resource_path: Path,
+        backlog_root: Path,
+        *,
+        product: Optional[str] = None,
+        agent: Optional[str] = None,
+        topic: Optional[str] = None,
+    ) -> str:
+        if product and product.strip():
+            candidate = ConfigLoader._normalize_product_name(product)
+            if (backlog_root / "products" / candidate).exists():
+                return candidate
+            raise ConfigError(f"Product root does not exist: {backlog_root / 'products' / candidate}")
+
+        inferred = ConfigLoader._infer_product(resource_path, backlog_root)
+        if inferred:
+            return inferred
+
+        topic_overrides = ConfigLoader.load_topic_overrides(backlog_root, topic=topic, agent=agent)
+        topic_default = topic_overrides.get("default_product")
+        if isinstance(topic_default, str) and topic_default.strip():
+            candidate = ConfigLoader._normalize_product_name(topic_default)
+            if (backlog_root / "products" / candidate).exists():
+                return candidate
+
+        defaults = ConfigLoader.load_defaults(backlog_root)
+        default_product = defaults.get("default_product")
+        if isinstance(default_product, str) and default_product.strip():
+            candidate = ConfigLoader._normalize_product_name(default_product)
+            if (backlog_root / "products" / candidate).exists():
+                return candidate
+
+        products = ConfigLoader._list_products(backlog_root)
+        if len(products) == 1:
+            return products[0]
+
+        raise ConfigError(
+            "Cannot determine product; specify --product or set _kano/backlog/_shared/defaults.json:default_product",
+        )
+
+    @staticmethod
     def from_path(
-        resource_path: Path, product: Optional[str] = None, sandbox: Optional[str] = None
+        resource_path: Path,
+        product: Optional[str] = None,
+        sandbox: Optional[str] = None,
+        *,
+        agent: Optional[str] = None,
+        topic: Optional[str] = None,
     ) -> BacklogContext:
         """
         Resolve backlog context from a file/folder path.
@@ -55,11 +211,14 @@ class ConfigLoader:
 
         platform_root = backlog_root.parent.parent  # Go up from _kano/backlog to platform root
 
-        # Determine product
-        if not product:
-            product = ConfigLoader._infer_product(resource_path, backlog_root)
-        if not product:
-            raise ConfigError(f"Cannot infer product name from path: {resource_path}")
+        # Determine product (explicit -> inferred -> topic override -> defaults -> single-product)
+        product = ConfigLoader._resolve_product_name(
+            resource_path,
+            backlog_root,
+            product=product,
+            agent=agent,
+            topic=topic,
+        )
 
         product_root = backlog_root / "products" / product
         if not product_root.exists():
@@ -126,3 +285,33 @@ class ConfigLoader:
             raise ConfigError(f"Invalid JSON in {defaults_path}: {e}")
         except Exception as e:
             raise ConfigError(f"Failed to load defaults from {defaults_path}: {e}")
+
+    @staticmethod
+    def load_effective_config(
+        resource_path: Path,
+        *,
+        product: Optional[str] = None,
+        sandbox: Optional[str] = None,
+        agent: Optional[str] = None,
+        topic: Optional[str] = None,
+        workset_item_id: Optional[str] = None,
+    ) -> tuple[BacklogContext, dict[str, Any]]:
+        """Return (context, effective_config) using the layered merge order."""
+        ctx = ConfigLoader.from_path(
+            resource_path,
+            product=product,
+            sandbox=sandbox,
+            agent=agent,
+            topic=topic,
+        )
+
+        defaults = ConfigLoader.load_defaults(ctx.backlog_root)
+        product_cfg = ConfigLoader.load_product_config(ctx.product_root)
+        topic_cfg = ConfigLoader.load_topic_overrides(ctx.backlog_root, topic=topic, agent=agent)
+        workset_cfg = ConfigLoader.load_workset_overrides(ctx.backlog_root, item_id=workset_item_id)
+
+        effective: dict[str, Any] = {}
+        for layer in (defaults, product_cfg, topic_cfg, workset_cfg):
+            if isinstance(layer, dict):
+                effective = ConfigLoader._deep_merge(effective, layer)
+        return ctx, effective

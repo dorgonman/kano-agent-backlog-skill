@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import typer
 
-from ..util import ensure_core_on_path, resolve_product_root, find_item_path_by_id
+from ..util import ensure_core_on_path, resolve_product_root, find_item_path_by_id, resolve_model
 
 app = typer.Typer()
 
@@ -15,6 +15,7 @@ def transition(
     action: str = typer.Option(..., help="propose|ready|start|review|done|block|drop"),
     agent: str = typer.Option("cli", help="Agent name for audit/worklog"),
     message: str = typer.Option("", help="Optional worklog message"),
+    model: str | None = typer.Option(None, help="Model used by agent (e.g., claude-sonnet-4.5, gpt-5.1)"),
     product: str | None = typer.Option(None, help="Product name under _kano/backlog/products"),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
@@ -36,7 +37,13 @@ def transition(
         raise typer.Exit(code=1)
 
     try:
-        updated = StateMachine.transition(item, act, agent=agent, message=message or None)
+        resolved_model, used_unknown = resolve_model(model)
+        if used_unknown:
+            typer.echo(
+                "Warning: model not provided; recording [model=unknown]. Set --model or env KANO_AGENT_MODEL/KANO_MODEL.",
+                err=True,
+            )
+        updated = StateMachine.transition(item, act, agent=agent, message=message or None, model=resolved_model)
         store.write(updated)
     except ValidationError as e:
         typer.echo(f"Error: Validation failed: {'; '.join(e.errors)}", err=True)
@@ -47,4 +54,4 @@ def transition(
         data["file_path"] = str(data.get("file_path"))
         typer.echo(json.dumps(data, ensure_ascii=False))
     else:
-        typer.echo(f"✓ {item_id} transitioned to {updated.state.value}")
+        typer.echo(f"OK: {item_id} transitioned to {updated.state.value}")

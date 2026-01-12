@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -34,6 +35,26 @@ def ensure_core_on_path() -> None:
     raise SystemExit("kano_backlog_core not found; install the package or check that kano_backlog_core is in src/ directory.")
 
 
+def resolve_model(model: Optional[str]) -> tuple[str, bool]:
+    """
+    Resolve the model name deterministically.
+
+    Order:
+    1) explicit CLI flag
+    2) env vars KANO_AGENT_MODEL, KANO_MODEL
+    3) "unknown"
+
+    Returns:
+        (model_value, is_default_unknown)
+    """
+    if model and model.strip():
+        return model.strip(), False
+    env_model = (os.environ.get("KANO_AGENT_MODEL") or os.environ.get("KANO_MODEL") or "").strip()
+    if env_model:
+        return env_model, False
+    return "unknown", True
+
+
 def find_platform_root(start: Optional[Path] = None) -> Path:
     """Find repo platform root containing _kano/backlog."""
     cur = (start or Path.cwd()).resolve()
@@ -53,6 +74,21 @@ def resolve_product_root(product: Optional[str] = None, start: Optional[Path] = 
         if not root.exists():
             raise SystemExit(f"Product not found: {root}")
         return root
+    # If defaults specify a product, honor it.
+    defaults_path = platform_root / "_kano" / "backlog" / "_shared" / "defaults.json"
+    if defaults_path.exists():
+        try:
+            import json
+
+            defaults = json.loads(defaults_path.read_text(encoding="utf-8"))
+            default_product = defaults.get("default_product") if isinstance(defaults, dict) else None
+            if isinstance(default_product, str) and default_product.strip():
+                candidate = products_dir / default_product.strip()
+                if candidate.exists():
+                    return candidate
+        except Exception:
+            # Keep fallback behavior if defaults are invalid.
+            pass
     # Fallback: pick the only product if exactly one exists
     candidates = [p for p in products_dir.iterdir() if p.is_dir()]
     if len(candidates) == 1:

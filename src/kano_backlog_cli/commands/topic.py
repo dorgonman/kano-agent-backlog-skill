@@ -167,6 +167,173 @@ def pin(
             typer.echo(f"Document already pinned to topic '{topic_name}'")
 
 
+@app.command("add-snippet")
+def add_snippet(
+    topic_name: str = typer.Argument(..., help="Topic name"),
+    file: str = typer.Option(..., "--file", help="Workspace-relative or absolute file path"),
+    start: int = typer.Option(..., "--start", help="Start line (1-based, inclusive)"),
+    end: int = typer.Option(..., "--end", help="End line (1-based, inclusive)"),
+    agent: Optional[str] = typer.Option(None, "--agent", help="Collector agent identity"),
+    snapshot: bool = typer.Option(False, "--snapshot", help="Include cached_text snapshot (cache)"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Collect a code snippet reference into the topic materials buffer."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import (
+        add_snippet_to_topic,
+        TopicNotFoundError,
+        TopicError,
+    )
+
+    try:
+        result = add_snippet_to_topic(
+            topic_name,
+            file_path=file,
+            start_line=start,
+            end_line=end,
+            agent=agent,
+            include_snapshot=snapshot,
+        )
+    except TopicNotFoundError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except TopicError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except Exception as exc:
+        typer.echo(f"❌ Unexpected error: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        payload = {
+            "topic": result.topic,
+            "added": result.added,
+            "snippet": result.snippet.to_dict(),
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        if result.added:
+            typer.echo(f"✓ Added snippet to topic '{topic_name}'")
+        else:
+            typer.echo(f"Snippet already present in topic '{topic_name}'")
+        rng = result.snippet.lines
+        typer.echo(f"  {result.snippet.file}#L{rng[0]}-L{rng[1]} ({result.snippet.hash})")
+
+
+@app.command("distill")
+def distill(
+    topic_name: str = typer.Argument(..., help="Topic name"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Generate/overwrite deterministic brief.md from collected materials."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import distill_topic, TopicNotFoundError, TopicError
+
+    try:
+        brief_path = distill_topic(topic_name)
+    except TopicNotFoundError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except TopicError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except Exception as exc:
+        typer.echo(f"❌ Unexpected error: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        typer.echo(json.dumps({"topic": topic_name, "brief_path": str(brief_path)}, ensure_ascii=False))
+    else:
+        typer.echo(f"✓ Distilled brief: {brief_path}")
+
+
+@app.command("close")
+def close(
+    topic_name: str = typer.Argument(..., help="Topic name"),
+    agent: Optional[str] = typer.Option(None, "--agent", help="Agent identity"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Mark topic as closed (enables TTL cleanup of materials)."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import close_topic, TopicNotFoundError, TopicError
+
+    try:
+        result = close_topic(topic_name, agent=agent)
+    except TopicNotFoundError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except TopicError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except Exception as exc:
+        typer.echo(f"❌ Unexpected error: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        typer.echo(
+            json.dumps(
+                {"topic": result.topic, "closed": result.closed, "closed_at": result.closed_at},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        if result.closed:
+            typer.echo(f"✓ Closed topic '{topic_name}' at {result.closed_at}")
+        else:
+            typer.echo(f"Topic '{topic_name}' already closed at {result.closed_at}")
+
+
+@app.command("cleanup")
+def cleanup(
+    ttl_days: int = typer.Option(14, "--ttl-days", help="Delete materials older than N days after close"),
+    apply: bool = typer.Option(False, "--apply", help="Perform deletion (default is dry-run)"),
+    delete_topic_dir: bool = typer.Option(False, "--delete-topic", help="Delete whole topic dir (dangerous)"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Cleanup raw materials for closed topics after TTL (dry-run by default)."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import cleanup_topics, TopicError
+
+    try:
+        result = cleanup_topics(ttl_days=ttl_days, dry_run=(not apply), delete_topic_dir=delete_topic_dir)
+    except TopicError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except Exception as exc:
+        typer.echo(f"❌ Unexpected error: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        payload = {
+            "topics_scanned": result.topics_scanned,
+            "topics_cleaned": result.topics_cleaned,
+            "materials_deleted": result.materials_deleted,
+            "deleted_paths": [str(p) for p in result.deleted_paths],
+            "dry_run": not apply,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        mode = "DRY RUN" if not apply else "APPLY"
+        typer.echo(f"{mode}: scanned={result.topics_scanned} cleaned={result.topics_cleaned}")
+        for p in result.deleted_paths:
+            typer.echo(f"  - {p}")
+
+
 @app.command()
 def switch(
     topic_name: str = typer.Argument(..., help="Topic name"),

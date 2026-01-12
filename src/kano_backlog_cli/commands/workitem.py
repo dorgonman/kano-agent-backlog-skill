@@ -62,7 +62,7 @@ def validate(
         typer.echo(json.dumps(result, ensure_ascii=False))
     else:
         if is_ready:
-            typer.echo(f"✓ {item.id} is READY")
+            typer.echo(f"OK: {item.id} is READY")
         else:
             typer.echo(f"❌ {item.id} is NOT READY")
             typer.echo("Missing fields:")
@@ -134,7 +134,7 @@ def _run_create_command(
         }
         typer.echo(json.dumps(payload, ensure_ascii=False))
     else:
-        typer.echo(f"✓ Created: {result.id}")
+        typer.echo(f"OK: Created: {result.id}")
         typer.echo(f"  Path: {result.path.name}")
         typer.echo(f"  Type: {result.type.value}")
 
@@ -211,7 +211,7 @@ def set_ready(
         typer.echo(f"❌ Failed to write item: {exc}", err=True)
         raise typer.Exit(2)
 
-    typer.echo(f"✓ Updated Ready fields for {item.id}")
+    typer.echo(f"OK: Updated Ready fields for {item.id}")
 
 
 @app.command(name="update-state")
@@ -220,6 +220,7 @@ def update_state_command(
     state: str = typer.Option(..., "--state", help="Target state (New|Proposed|Ready|InProgress|Review|Done|Blocked|Dropped)"),
     agent: str = typer.Option(..., "--agent", help="Agent name (for audit trail)"),
     message: str = typer.Option("", "--message", help="Worklog message"),
+    model: str | None = typer.Option(None, "--model", help="Model used by agent (e.g., claude-sonnet-4.5, gpt-5.1)"),
     product: str | None = typer.Option(None, "--product", help="Product name"),
     sync_parent: bool = typer.Option(True, "--sync-parent/--no-sync-parent", help="Sync parent state forward"),
     refresh_dashboards: bool = typer.Option(True, "--refresh/--no-refresh", help="Refresh dashboards after update"),
@@ -250,11 +251,20 @@ def update_state_command(
         raise typer.Exit(1)
 
     try:
+        from ..util import resolve_model
+
+        resolved_model, used_unknown = resolve_model(model)
+        if used_unknown:
+            typer.echo(
+                "Warning: model not provided; recording [model=unknown]. Set --model or env KANO_AGENT_MODEL/KANO_MODEL.",
+                err=True,
+            )
         result = ops_update_state(
             item_ref=item_ref,
             new_state=item_state,
             agent=agent,
             message=message or None,
+            model=resolved_model,
             product=product,
             sync_parent=sync_parent,
             refresh_dashboards=refresh_dashboards,
@@ -277,7 +287,7 @@ def update_state_command(
         }
         typer.echo(json.dumps(payload, ensure_ascii=False))
     else:
-        typer.echo(f"✓ Updated {result.id}: {result.old_state.value} → {result.new_state.value}")
+        typer.echo(f"OK: Updated {result.id}: {result.old_state.value} -> {result.new_state.value}")
         if result.worklog_appended and message:
             typer.echo(f"  Worklog: {message}")
         if result.parent_synced:
@@ -326,7 +336,7 @@ def attach_artifact_command(
         }
         typer.echo(json.dumps(payload, ensure_ascii=False))
     else:
-        typer.echo(f"✓ Attached artifact to {result.id}")
+        typer.echo(f"OK: Attached artifact to {result.id}")
         typer.echo(f"  Source: {result.source.name}")
         typer.echo(f"  Dest: {result.destination}")
         if note:

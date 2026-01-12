@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import typer
 
-from ..util import ensure_core_on_path, resolve_product_root, find_item_path_by_id
+from ..util import ensure_core_on_path, resolve_product_root, find_item_path_by_id, resolve_model
 
 app = typer.Typer()
 
@@ -28,7 +28,14 @@ def append(
     item_path = find_item_path_by_id(store.items_root, item_id)
     item = store.read(item_path)
 
-    AuditLog.append_worklog(item, message, agent=agent, model=model)
+    resolved_model, used_unknown = resolve_model(model)
+    if used_unknown:
+        typer.echo(
+            "Warning: model not provided; recording [model=unknown]. Set --model or env KANO_AGENT_MODEL/KANO_MODEL.",
+            err=True,
+        )
+
+    AuditLog.append_worklog(item, message, agent=agent, model=resolved_model)
     store.write(item)
 
     if output_format == "json":
@@ -36,4 +43,4 @@ def append(
         data["file_path"] = str(data.get("file_path"))
         typer.echo(json.dumps(data, ensure_ascii=False))
     else:
-        typer.echo(f"✓ Appended worklog to {item_id}")
+        typer.echo(f"OK: Appended worklog to {item_id}")
