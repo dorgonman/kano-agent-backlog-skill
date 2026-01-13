@@ -69,6 +69,34 @@ def test_template_engine_each_loop():
     assert "- Banana: 5" in rendered
 
 
+def test_template_engine_nested_each_loop_and_unless():
+    """Nested loops must not confuse outer block matching; unless should render on empty lists."""
+    engine = TemplateEngine()
+    tpl = """
+{{#each items}}
+- {{name}}
+  {{#each refs}}
+  - {{this}}
+  {{/each}}
+  {{#unless refs}}
+  - (no refs)
+  {{/unless}}
+{{/each}}
+"""
+    ctx = {
+        "items": [
+            {"name": "Alpha", "refs": ["r1", "r2"]},
+            {"name": "Beta", "refs": []},
+        ]
+    }
+    rendered = engine.render(tpl, ctx)
+    assert "- Alpha" in rendered
+    assert "- r1" in rendered
+    assert "- r2" in rendered
+    assert "- Beta" in rendered
+    assert "(no refs)" in rendered
+
+
 def test_template_engine_if_eq_helpers():
     """Test #if (eq ...) helper."""
     engine = TemplateEngine()

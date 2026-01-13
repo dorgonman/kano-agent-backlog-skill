@@ -222,6 +222,8 @@ def report(
     # 3. Render
     engine = TemplateEngine()
     context = asdict(pack) # Flatten evidence pack to dict
+    # Templates expect {{scope}}; provide an alias to meta.scope for convenience.
+    context.setdefault("scope", pack.meta.scope)
     rendered = engine.render(template_content, context)
     
     # 4. Write or Print

@@ -8,12 +8,13 @@ backlog without shelling out to legacy scripts.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 import os
 
 import frontmatter
+
+from kano_backlog_core.vcs.detector import detect_vcs_metadata, format_vcs_metadata
 
 
 STATE_GROUPS = {
@@ -108,6 +109,8 @@ def refresh_dashboards(
             output_path=output_path,
             source_label=source_label,
             agent=agent,
+            reproducible=True,
+            meta_mode="min",
         )
         output_path.write_text(content, encoding="utf-8")
         dashboards.append(output_path)
@@ -147,6 +150,8 @@ def generate_view(
         output_path=output_path,
         source_label=_describe_source(items_root, target_root),
         agent="unknown",
+        reproducible=True,
+        meta_mode="min",
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(content, encoding="utf-8")
@@ -235,12 +240,22 @@ def _render_dashboard(
     output_path: Path,
     source_label: str,
     agent: str,
+    reproducible: bool = True,
+    meta_mode: str = "min",
 ) -> str:
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     lines: List[str] = []
     lines.append(f"# {title}")
     lines.append("")
-    lines.append(f"Generated: {timestamp}")
+    
+    # Add VCS metadata instead of timestamp
+    if reproducible:
+        workspace_root = _find_workspace_root(output_path)
+        vcs_meta = detect_vcs_metadata(workspace_root)
+        metadata_block = format_vcs_metadata(vcs_meta, meta_mode)
+        if metadata_block:
+            lines.append(metadata_block)
+            lines.append("")
+    
     lines.append(f"Source: {source_label}")
     lines.append(f"Agent: {agent}")
     lines.append("")
@@ -300,6 +315,18 @@ def _relative_path(target: Path, start: Path) -> str:
         return os.path.relpath(target, start).replace("\\", "/")
     except ValueError:
         return target.as_posix()
+
+
+def _find_workspace_root(path: Path) -> Path:
+    """Find workspace root from any path."""
+    current = path.resolve()
+    while current != current.parent:
+        if (current / "_kano").exists():
+            return current
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    return Path.cwd()
 
 
 def _ensure_str_list(values: object) -> List[str]:
