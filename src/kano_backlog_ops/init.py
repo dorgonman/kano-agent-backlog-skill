@@ -33,7 +33,7 @@ def init_backlog(
     backlog_root: Optional[Path] = None,
     *,
     agent: str,
-    project_name: Optional[str] = None,
+    product_name: Optional[str] = None,
     prefix: Optional[str] = None,
     persona: str = "developer",
     skill_developer: bool = False,
@@ -43,7 +43,7 @@ def init_backlog(
 ) -> InitBacklogResult:
     """Initialize backlog structure for a product."""
 
-    product_name = _normalize_product_name(product)
+    normalized_product = _normalize_product_name(product)
     backlog_root_path, backlog_created = _resolve_backlog_root(backlog_root, create_if_missing=True)
     created_paths: List[Path] = [backlog_root_path] if backlog_created else []
 
@@ -51,7 +51,7 @@ def init_backlog(
     if _ensure_dir(products_root):
         created_paths.append(products_root)
 
-    product_root = products_root / product_name
+    product_root = products_root / normalized_product
     if product_root.exists() and not force:
         raise FileExistsError(f"Product backlog already exists: {product_root}")
     if _ensure_dir(product_root):
@@ -59,15 +59,15 @@ def init_backlog(
 
     created_paths.extend(_create_scaffold(product_root))
 
-    actual_project_name = project_name.strip() if project_name else product_name
-    if not actual_project_name:
-        raise ValueError("Project name cannot be empty")
-    actual_prefix = (prefix or item_utils.derive_prefix(actual_project_name)).upper()
+    actual_product_name = product_name.strip() if product_name else normalized_product
+    if not actual_product_name:
+        raise ValueError("Product name cannot be empty")
+    actual_prefix = (prefix or item_utils.derive_prefix(actual_product_name)).upper()
 
     config_path = _write_config(
         product_root=product_root,
         agent=agent,
-        project_name=actual_project_name,
+        product_name=actual_product_name,
         prefix=actual_prefix,
         persona=persona,
         skill_developer=skill_developer,
@@ -82,7 +82,7 @@ def init_backlog(
             from .view import refresh_dashboards
 
             result = refresh_dashboards(
-                product=product_name,
+                product=normalized_product,
                 agent=agent,
                 backlog_root=backlog_root_path,
             )
@@ -101,7 +101,7 @@ def init_backlog(
         backlog_root=backlog_root_path,
         product_root=product_root,
         sandbox_root=None,
-        product_name=product_name,
+        product_name=normalized_product,
         is_sandbox=False,
     )
 
@@ -128,10 +128,10 @@ def check_initialized(
 
     if product:
         target = backlog_root_path / "products" / _normalize_product_name(product)
-        return (target / "_config" / "config.json").exists()
+        return (target / "_config" / "config.toml").exists() or (target / "_config" / "config.json").exists()
 
     # Platform-level check: either root config or at least one product config exists.
-    if (backlog_root_path / "_config" / "config.json").exists():
+    if (backlog_root_path / "_config" / "config.toml").exists() or (backlog_root_path / "_config" / "config.json").exists():
         return True
 
     products_root = backlog_root_path / "products"
@@ -141,7 +141,8 @@ def check_initialized(
     for candidate in products_root.iterdir():
         if not candidate.is_dir():
             continue
-        if (candidate / "_config" / "config.json").exists():
+        config_dir = candidate / "_config"
+        if (config_dir / "config.toml").exists() or (config_dir / "config.json").exists():
             return True
     return False
 
@@ -155,7 +156,7 @@ def _create_scaffold(product_root: Path) -> List[Path]:
         product_root / "items",
         product_root / "_config",
         product_root / "_meta",
-        product_root / "_index",
+        product_root / ".cache",
         product_root / "artifacts",
     ]
 
@@ -179,7 +180,7 @@ def _write_config(
     *,
     product_root: Path,
     agent: str,
-    project_name: str,
+    product_name: str,
     prefix: str,
     persona: str,
     skill_developer: bool,
@@ -196,8 +197,8 @@ def _write_config(
             "skill_developer": bool(skill_developer),
             "persona": persona or "developer",
         },
-        "project": {
-            "name": project_name,
+        "product": {
+            "name": product_name,
             "prefix": prefix,
         },
         "views": {"auto_refresh": True},

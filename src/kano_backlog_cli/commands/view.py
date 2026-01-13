@@ -19,7 +19,9 @@ def refresh(
     """Refresh all dashboards (views) in the backlog."""
     try:
         ensure_core_on_path()
+        from kano_backlog_core.config import ConfigLoader
         from kano_backlog_ops.view import refresh_dashboards as ops_refresh
+        from .config_cmd import _default_auto_export_path, _write_effective_config_artifact
         
         backlog_path = Path(backlog_root)
         if not backlog_path.exists():
@@ -28,6 +30,27 @@ def refresh(
         
         # Call ops layer
         typer.echo("Refreshing views...")
+
+        # Best-effort: write effective config artifact for downstream tooling.
+        # This should not block view refresh.
+        try:
+            ctx, effective = ConfigLoader.load_effective_config(
+                backlog_path,
+                product=product,
+                agent=agent,
+            )
+            out_path = _default_auto_export_path(ctx, "toml", topic=None, workset_item_id=None)
+            _write_effective_config_artifact(
+                ctx=ctx,
+                effective=effective,
+                fmt="toml",
+                out_path=out_path,
+                overwrite=True,
+            )
+            typer.echo(f"✓ Wrote effective config: {out_path}")
+        except Exception as e:
+            typer.echo(f"⚠️  Could not write effective config artifact: {e}", err=True)
+
         config_path = Path(config) if config else None
         result = ops_refresh(
             product=product,

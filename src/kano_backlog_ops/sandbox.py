@@ -82,7 +82,7 @@ def init_sandbox(
         sandbox_root / "items",
         sandbox_root / "_config",
         sandbox_root / "_meta",
-        sandbox_root / "_index",
+        sandbox_root / ".cache",
         sandbox_root / "artifacts",
     ]
     

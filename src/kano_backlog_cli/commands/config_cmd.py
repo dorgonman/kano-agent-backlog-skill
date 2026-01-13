@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,16 +17,16 @@ app = typer.Typer(help="Configuration inspection and validation")
 
 def _validate_required_fields(cfg: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    project = cfg.get("project")
-    if not isinstance(project, dict):
-        errors.append("[project] must be a table with name and prefix")
+    product = cfg.get("product")
+    if not isinstance(product, dict):
+        errors.append("[product] must be a table with name and prefix")
     else:
-        name = project.get("name")
-        prefix = project.get("prefix")
+        name = product.get("name")
+        prefix = product.get("prefix")
         if not isinstance(name, str) or not name.strip():
-            errors.append("[project].name is required and must be a non-empty string")
+            errors.append("[product].name is required and must be a non-empty string")
         if not isinstance(prefix, str) or not prefix.strip():
-            errors.append("[project].prefix is required and must be a non-empty string")
+            errors.append("[product].prefix is required and must be a non-empty string")
 
     process = cfg.get("process")
     if isinstance(process, dict):
@@ -32,6 +34,63 @@ def _validate_required_fields(cfg: dict[str, Any]) -> list[str]:
             errors.append("[process] cannot set both profile and path")
 
     return errors
+
+
+def _stringify_paths(value: Any) -> Any:
+    """Recursively convert Path objects to str for serialization."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _stringify_paths(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_stringify_paths(v) for v in value]
+    return value
+
+
+def _default_export_path(ctx, fmt: str, topic: str | None, workset_item_id: str | None) -> Path:
+    # DEPRECATED: Manual config export now requires explicit --out path to avoid accumulating files.
+    # This function is kept for backward compatibility but should not be used.
+    raise NotImplementedError("config export now requires explicit --out path")
+
+
+def _default_auto_export_path(ctx, fmt: str, topic: str | None, workset_item_id: str | None) -> Path:
+    # Auto-export writes a stable effective_config artifact to product-level .cache/
+    # (topic and workset overrides not yet supported for auto-export)
+    return ctx.product_root / ".cache" / f"effective_config.{fmt}"
+
+
+def _write_effective_config_artifact(
+    *,
+    ctx,
+    effective: dict[str, Any],
+    fmt: str,
+    out_path: Path,
+    overwrite: bool,
+) -> Path:
+    context_dict = _stringify_paths(ctx.model_dump())
+    # Provide project_root alias for clarity; drop platform_root to avoid confusion.
+    if "platform_root" in context_dict:
+        context_dict.setdefault("project_root", context_dict["platform_root"])
+        context_dict.pop("platform_root", None)
+
+    payload = {
+        "context": context_dict,
+        "config": effective,
+    }
+    cleaned_payload = _strip_nulls(payload)
+    serializable = _stringify_paths(cleaned_payload)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_path.exists() and not overwrite:
+        raise FileExistsError(f"Refusing to overwrite existing file: {out_path}")
+
+    if fmt == "json":
+        text = json.dumps(serializable, indent=2, default=str)
+    else:
+        text = tomli_w.dumps(serializable)
+
+    out_path.write_text(text, encoding="utf-8")
+    return out_path
 
 
 _SECRET_SUFFIXES = ("_token", "_password", "_key")
@@ -115,6 +174,62 @@ def config_show(
     )
 
 
+@app.command("export")
+def config_export(
+    path: Path = typer.Option(Path("."), "--path", help="Resource path to resolve config from"),
+    product: str | None = typer.Option(None, "--product", help="Product name (optional)"),
+    sandbox: str | None = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
+    agent: str | None = typer.Option(None, "--agent", help="Agent name for topic lookup"),
+    topic: str | None = typer.Option(None, "--topic", help="Explicit topic name"),
+    workset_item_id: str | None = typer.Option(None, "--workset", help="Workset item id"),
+    format: str = typer.Option("toml", "--format", case_sensitive=False, help="Output format: toml|json"),
+    out: Path | None = typer.Option(None, "--out", help="Output file path (REQUIRED: no default to avoid file accumulation)"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite if output already exists"),
+):
+    """Write effective merged config (context + config) to disk."""
+    ensure_core_on_path()
+    from kano_backlog_core.config import ConfigLoader
+    from kano_backlog_core.errors import ConfigError
+
+    fmt = format.lower()
+    if fmt not in {"toml", "json"}:
+        typer.echo("format must be toml or json")
+        raise typer.Exit(1)
+
+    try:
+        ctx, effective = ConfigLoader.load_effective_config(
+            path,
+            product=product,
+            sandbox=sandbox,
+            agent=agent,
+            topic=topic,
+            workset_item_id=workset_item_id,
+        )
+    except ConfigError as e:
+        typer.echo(f"ConfigError: {e}")
+        raise typer.Exit(1)
+
+    if not out:
+        typer.echo("Error: --out is required. Specify output file path to avoid accumulating timestamped files.")
+        typer.echo("Hint: Use auto-export via 'view refresh' for a stable .cache/effective_config.toml instead.")
+        raise typer.Exit(1)
+
+    out_path = out
+    try:
+        written = _write_effective_config_artifact(
+            ctx=ctx,
+            effective=effective,
+            fmt=fmt,
+            out_path=out_path,
+            overwrite=overwrite,
+        )
+    except FileExistsError as e:
+        typer.echo(str(e))
+        raise typer.Exit(1)
+
+    typer.echo(f"Wrote effective config to {written}")
+
+
 @app.command("validate")
 def config_validate(
     path: Path = typer.Option(Path("."), "--path", help="Resource path to resolve config from"),
@@ -153,6 +268,81 @@ def config_validate(
         raise typer.Exit(1)
 
     typer.echo("Config is valid")
+
+
+@app.command("init")
+def config_init(
+    path: Path = typer.Option(Path("."), "--path", help="Resource path to resolve config from"),
+    product: str | None = typer.Option(None, "--product", help="Product name (optional)"),
+    sandbox: str | None = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
+    agent: str | None = typer.Option(None, "--agent", help="Agent name for topic lookup"),
+    topic: str | None = typer.Option(None, "--topic", help="Explicit topic name"),
+    workset_item_id: str | None = typer.Option(None, "--workset", help="Workset item id"),
+    prefix: str | None = typer.Option(None, "--prefix", help="Override product prefix (default: derived)"),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing config.toml if present"),
+):
+    """Instantiate a product config from the annotated template."""
+    ensure_core_on_path()
+    from kano_backlog_core.config import ConfigLoader
+    from kano_backlog_core.errors import ConfigError
+    from kano_backlog_ops import item_utils
+
+    try:
+        ctx, _ = ConfigLoader.load_effective_config(
+            path,
+            product=product,
+            sandbox=sandbox,
+            agent=agent,
+            topic=topic,
+            workset_item_id=workset_item_id,
+        )
+    except ConfigError as e:
+        typer.echo(f"ConfigError: {e}")
+        raise typer.Exit(1)
+
+    product_root = ctx.product_root
+    config_path = product_root / "_config" / "config.toml"
+    if config_path.exists() and not force:
+        typer.echo(f"Config already exists: {config_path}. Use --force to overwrite.")
+        raise typer.Exit(1)
+
+    template_path = Path(__file__).resolve().parents[3] / "templates" / "config.template.toml"
+    if not template_path.exists():
+        typer.echo(f"Template not found: {template_path}")
+        raise typer.Exit(1)
+
+    product_name = ctx.product_name
+    derived_prefix = item_utils.derive_prefix(product_name)
+    final_prefix = (prefix or derived_prefix).upper()
+
+    template = template_path.read_text(encoding="utf-8")
+    rendered = template.replace("{{PRODUCT_NAME}}", product_name).replace("{{PRODUCT_PREFIX}}", final_prefix)
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(rendered, encoding="utf-8")
+    typer.echo(f"Wrote product config from template: {config_path}")
+
+    # Best-effort: write stable effective config artifact to _index/.
+    try:
+        ctx2, effective2 = ConfigLoader.load_effective_config(
+            path,
+            product=product,
+            sandbox=sandbox,
+            agent=agent,
+            topic=topic,
+            workset_item_id=workset_item_id,
+        )
+        out_path = _default_auto_export_path(ctx2, "toml", topic, workset_item_id)
+        _write_effective_config_artifact(
+            ctx=ctx2,
+            effective=effective2,
+            fmt="toml",
+            out_path=out_path,
+            overwrite=True,
+        )
+        typer.echo(f"Wrote effective config artifact: {out_path}")
+    except Exception as e:
+        typer.echo(f"Warning: could not write effective config artifact: {e}")
 
 
 @app.command("migrate-json")
@@ -234,6 +424,10 @@ def config_migrate_json(
             continue
 
         cleaned = _strip_nulls(data)
+        if isinstance(cleaned.get("project"), dict):
+            project_cfg = cleaned.pop("project")
+            if "product" not in cleaned:
+                cleaned["product"] = project_cfg
         plan: dict[str, Any] = {
             "label": label,
             "json": str(json_path),
@@ -256,16 +450,37 @@ def config_migrate_json(
         typer.echo("No JSON config files found to migrate.")
         return
 
-    typer.echo(
-        json.dumps(
-            {
-                "applied": write,
-                "plans": plans,
-                "rollback": "Restore from the backup paths if needed.",
-            },
-            indent=2,
-        )
-    )
+    response: dict[str, Any] = {
+        "applied": write,
+        "plans": plans,
+        "rollback": "Restore from the backup paths if needed.",
+    }
+
+    # Best-effort: if we applied a migration, write a stable effective config artifact.
+    # IMPORTANT: keep output as valid JSON for scripting.
+    if write and not had_error:
+        try:
+            ctx2, effective2 = ConfigLoader.load_effective_config(
+                path,
+                product=product,
+                sandbox=sandbox,
+                agent=agent,
+                topic=topic,
+                workset_item_id=workset_item_id,
+            )
+            out_path = _default_auto_export_path(ctx2, "toml", topic, workset_item_id)
+            _write_effective_config_artifact(
+                ctx=ctx2,
+                effective=effective2,
+                fmt="toml",
+                out_path=out_path,
+                overwrite=True,
+            )
+            response["effective_config_artifact"] = str(out_path)
+        except Exception as e:
+            response["effective_config_error"] = str(e)
+
+    typer.echo(json.dumps(response, indent=2))
 
     if had_error:
         raise typer.Exit(1)

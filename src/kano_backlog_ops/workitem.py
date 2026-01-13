@@ -109,12 +109,10 @@ def create_item(
         try:
             ctx = ConfigLoader.from_path(Path.cwd(), product=product)
             backlog_root = ctx.product_root  # Use product root, not platform root
-            # Read prefix from product config
-            config_path = backlog_root / "_config" / "config.json"
-            if config_path.exists():
-                import json
-                config_data = json.loads(config_path.read_text(encoding="utf-8"))
-                prefix = config_data.get("project", {}).get("prefix") or item_utils.derive_prefix(product)
+            config_data = ConfigLoader.load_product_config(ctx.product_root)
+            product_cfg = config_data.get("product") if isinstance(config_data, dict) else {}
+            if isinstance(product_cfg, dict):
+                prefix = product_cfg.get("prefix") or item_utils.derive_prefix(product)
             else:
                 prefix = item_utils.derive_prefix(product)
         except Exception as e:

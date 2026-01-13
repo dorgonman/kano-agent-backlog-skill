@@ -21,15 +21,15 @@ def backlog(
 		"--backlog-root",
 		help="Path to _kano/backlog (auto-detected or created near the repo root)",
 	),
-	project_name: str | None = typer.Option(
+	product_name: str | None = typer.Option(
 		None,
-		"--project-name",
-		help="Overrides project.name in config (defaults to product)",
+		"--product-name",
+		help="Overrides product.name in config (defaults to product)",
 	),
 	prefix: str | None = typer.Option(
 		None,
 		"--prefix",
-		help="Overrides project.prefix in config (defaults to derived prefix)",
+		help="Overrides product.prefix in config (defaults to derived prefix)",
 	),
 	persona: str = typer.Option(
 		"developer",
@@ -72,7 +72,7 @@ def backlog(
 			product=product,
 			backlog_root=backlog_root,
 			agent=agent,
-			project_name=project_name,
+			product_name=product_name,
 			prefix=prefix,
 			persona=persona,
 			skill_developer=skill_developer,

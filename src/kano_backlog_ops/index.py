@@ -66,9 +66,9 @@ def build_index(
     backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
 
     def _product_index_path(prod_root: Path) -> Path:
-        idx_dir = prod_root / "_index"
-        idx_dir.mkdir(parents=True, exist_ok=True)
-        return idx_dir / "backlog.sqlite3"
+        cache_dir = prod_root / ".cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / "index.sqlite3"
 
     items_indexed_total = 0
     links_indexed_total = 0  # links not indexed in MVP
@@ -104,7 +104,7 @@ def build_index(
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     return IndexBuildResult(
-        index_path=last_index_path if last_index_path else backlog_root_path / "_index" / "backlog.sqlite3",
+        index_path=last_index_path if last_index_path else backlog_root_path / ".cache" / "index.sqlite3",
         items_indexed=items_indexed_total,
         links_indexed=links_indexed_total,
         build_time_ms=elapsed_ms,

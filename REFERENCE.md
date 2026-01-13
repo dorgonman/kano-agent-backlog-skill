@@ -40,6 +40,7 @@ The `references/` folder is intentionally split into multiple small files so an 
 - `kano backlog demo seed`: seed demo data (1 epic → 1 feature → 3 tasks) for testing
 - `kano backlog persona summary|report`: generate persona activity summaries/reports
 - `kano backlog sandbox init`: scaffold isolated sandbox environments for experimentation
+- `kano config show|validate|migrate-json|export|init`: inspect/validate/migrate/export config (TOML-first; `product.*` required)
 
 No new standalone scripts will be added under `scripts/`; all operations flow through the unified CLI.
 
@@ -51,6 +52,7 @@ In the demo host repo, the backlog lives under `_kano/backlog/`:
 - Decisions/ADRs: `_kano/backlog/decisions/**`
 - Views: `_kano/backlog/views/**`
 - Tools: `_kano/backlog/tools/**`
+- Product configs: `_kano/backlog/products/<product>/_config/config.toml` (`product.name`, `product.prefix`)
 
 ## Versioning
 

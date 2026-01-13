@@ -5,7 +5,6 @@ This exercises kano_backlog_core.config.ConfigLoader without requiring CLI wirin
 
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -31,8 +30,8 @@ def _mk_backlog(tmp: Path, *, products: list[str]) -> Path:
     for product in products:
         product_root = products_root / product
         (product_root / "_config").mkdir(parents=True, exist_ok=True)
-        (product_root / "_config" / "config.json").write_text(
-            json.dumps({"project": {"name": product, "prefix": product[:3].upper()}}),
+        (product_root / "_config" / "config.toml").write_text(
+            f"[product]\nname = \"{product}\"\nprefix = \"{product[:3].upper()}\"\n",
             encoding="utf-8",
         )
 
@@ -51,8 +50,8 @@ def test_from_path_uses_defaults_default_product_when_not_inferable():
     tmp = _tmp_workspace()
     try:
         backlog_root = _mk_backlog(tmp, products=["prod-a", "prod-b"])
-        (backlog_root / "_shared" / "defaults.json").write_text(
-            json.dumps({"default_product": "prod-b"}), encoding="utf-8"
+        (backlog_root / "_shared" / "defaults.toml").write_text(
+            "default_product = \"prod-b\"\n", encoding="utf-8"
         )
 
         ctx = ConfigLoader.from_path(tmp)
@@ -66,16 +65,16 @@ def test_from_path_topic_override_beats_defaults_when_agent_has_active_topic():
     tmp = _tmp_workspace()
     try:
         backlog_root = _mk_backlog(tmp, products=["prod-a", "prod-b"])
-        (backlog_root / "_shared" / "defaults.json").write_text(
-            json.dumps({"default_product": "prod-b"}), encoding="utf-8"
+        (backlog_root / "_shared" / "defaults.toml").write_text(
+            "default_product = \"prod-b\"\n", encoding="utf-8"
         )
 
         # Create topic config override and active topic marker for agent
         topic_name = "mytopic"
         topic_dir = backlog_root / "topics" / topic_name
         topic_dir.mkdir(parents=True, exist_ok=True)
-        (topic_dir / "config.json").write_text(
-            json.dumps({"default_product": "prod-a"}), encoding="utf-8"
+        (topic_dir / "config.toml").write_text(
+            "default_product = \"prod-a\"\n", encoding="utf-8"
         )
         active_marker = backlog_root / ".cache" / "worksets" / "active_topic.copilot.txt"
         active_marker.parent.mkdir(parents=True, exist_ok=True)
@@ -91,15 +90,15 @@ def test_load_effective_config_layers_merge_in_order():
     tmp = _tmp_workspace()
     try:
         backlog_root = _mk_backlog(tmp, products=["prod-a"])
-        (backlog_root / "_shared" / "defaults.json").write_text(
-            json.dumps({"views": {"auto_refresh": False}, "x": 1}),
+        (backlog_root / "_shared" / "defaults.toml").write_text(
+            "x = 1\n\n[views]\nauto_refresh = false\n",
             encoding="utf-8",
         )
 
         # product config adds nested key
-        product_cfg_path = backlog_root / "products" / "prod-a" / "_config" / "config.json"
+        product_cfg_path = backlog_root / "products" / "prod-a" / "_config" / "config.toml"
         product_cfg_path.write_text(
-            json.dumps({"views": {"auto_refresh": False, "mode": "product"}, "x": 2}),
+            "x = 2\n\n[views]\nauto_refresh = false\nmode = \"product\"\n",
             encoding="utf-8",
         )
 
@@ -107,8 +106,8 @@ def test_load_effective_config_layers_merge_in_order():
         topic_name = "mytopic"
         topic_dir = backlog_root / "topics" / topic_name
         topic_dir.mkdir(parents=True, exist_ok=True)
-        (topic_dir / "config.json").write_text(
-            json.dumps({"views": {"auto_refresh": True}}), encoding="utf-8"
+        (topic_dir / "config.toml").write_text(
+            "[views]\nauto_refresh = true\n", encoding="utf-8"
         )
         active_marker = backlog_root / ".cache" / "worksets" / "active_topic.copilot.txt"
         active_marker.parent.mkdir(parents=True, exist_ok=True)
@@ -118,8 +117,8 @@ def test_load_effective_config_layers_merge_in_order():
         item_id = "PRO-TSK-0001"
         workset_dir = backlog_root / ".cache" / "worksets" / "items" / item_id
         workset_dir.mkdir(parents=True, exist_ok=True)
-        (workset_dir / "config.json").write_text(
-            json.dumps({"views": {"mode": "workset"}, "x": 3}), encoding="utf-8"
+        (workset_dir / "config.toml").write_text(
+            "x = 3\n\n[views]\nmode = \"workset\"\n", encoding="utf-8"
         )
 
         ctx, cfg = ConfigLoader.load_effective_config(

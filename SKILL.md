@@ -148,15 +148,15 @@ Execution:
 ## ID prefix derivation
 
 - Source of truth:
-  - Product config: `_kano/backlog/products/<product>/_config/config.json` (`project.name`, `project.prefix`), or
-  - Repo config (single-product): `_kano/backlog/_config/config.json` (`project.name`, `project.prefix`).
+  - Product config: `_kano/backlog/products/<product>/_config/config.toml` (`product.name`, `product.prefix`), or
+  - Repo config (single-product): `_kano/backlog/_config/config.toml` (`product.name`, `product.prefix`).
 - Derivation:
-  - Split `project.name` on non-alphanumeric separators and camel-case boundaries.
+  - Split `product.name` on non-alphanumeric separators and camel-case boundaries.
   - Take the first letter of each segment.
   - If only one letter, take the first letter plus the next consonant (A/E/I/O/U skipped).
   - If still short, use the first two letters.
   - Uppercase the result.
-- Example: `project.name=kano-agent-backlog-skill-demo` -> `KABSD`.
+- Example: `product.name=kano-agent-backlog-skill-demo` -> `KABSD`.
 
 ## Recommended layout
 

@@ -75,7 +75,7 @@ def test_migrate_json_writes_toml_and_backup(tmp_path: Path):
     assert toml_path.exists(), "TOML config should be written"
 
     toml_data = _read_toml(toml_path)
-    assert toml_data["project"]["prefix"] == "DEMO"
+    assert toml_data["product"]["prefix"] == "DEMO"
     assert toml_data["log"]["verbosity"] == "info"
     assert "path" not in toml_data["index"], "Null fields should be stripped"
 
@@ -93,7 +93,7 @@ def test_migrate_json_skips_when_toml_exists(tmp_path: Path, existing_toml: bool
 
     if existing_toml:
         product_cfg.mkdir(parents=True, exist_ok=True)
-        (product_cfg / "config.toml").write_text("[project]\nname = 'demo'\nprefix = 'DEMO'\n", encoding="utf-8")
+        (product_cfg / "config.toml").write_text("[product]\nname = 'demo'\nprefix = 'DEMO'\n", encoding="utf-8")
 
     result = runner.invoke(app, ["config", "migrate-json", "--path", str(product_root), "--write"])
     assert result.exit_code == 0, result.output

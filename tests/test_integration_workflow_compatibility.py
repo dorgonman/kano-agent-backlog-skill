@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 
@@ -22,16 +21,22 @@ def _scaffold_product(tmp_path: Path, name: str, prefix: str) -> Path:
 
     cfg_dir = product_root / "_config"
     cfg_dir.mkdir(parents=True, exist_ok=True)
-    cfg = {
-        "project": {"name": name, "prefix": prefix},
-        "views": {"auto_refresh": False},
-        "log": {"verbosity": "info", "debug": False},
-    }
-    (cfg_dir / "config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    cfg_text = f"""[product]
+name = "{name}"
+prefix = "{prefix}"
+
+[views]
+auto_refresh = false
+
+[log]
+verbosity = "info"
+debug = false
+"""
+    (cfg_dir / "config.toml").write_text(cfg_text, encoding="utf-8")
 
     shared = backlog_root / "_shared"
     shared.mkdir(parents=True, exist_ok=True)
-    (shared / "defaults.json").write_text(json.dumps({"default_product": name}), encoding="utf-8")
+    (shared / "defaults.toml").write_text(f"default_product = \"{name}\"\n", encoding="utf-8")
 
     return product_root
 

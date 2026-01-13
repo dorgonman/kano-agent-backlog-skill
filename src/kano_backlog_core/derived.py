@@ -1,12 +1,28 @@
 """Derived store for querying backlog items (read-only index operations)."""
 
 from abc import ABC, abstractmethod
+import subprocess
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 from enum import Enum
 
 from .canonical import CanonicalStore
 from .models import BacklogItem, ItemType, ItemState
+
+
+def get_git_sha(path: Path) -> Optional[str]:
+    """Get current git HEAD SHA for the given path."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return None
 
 
 class QueryFilter:
