@@ -24,6 +24,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from .errors import ConfigError
+from .backend_uri import compile_effective_config
 
 # Conditional TOML import: stdlib tomllib (3.11+) or fallback tomli (<3.11)
 try:
@@ -353,4 +354,7 @@ class ConfigLoader:
         for layer in (defaults, product_cfg, topic_cfg, workset_cfg):
             if isinstance(layer, dict):
                 effective = ConfigLoader._deep_merge(effective, layer)
+
+        # Compile human-friendly backend blocks into canonical URIs (local-first; no network calls)
+        effective = compile_effective_config(effective, default_filesystem_root=ctx.platform_root)
         return ctx, effective
