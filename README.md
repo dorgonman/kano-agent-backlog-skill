@@ -1,5 +1,12 @@
 # kano-agent-backlog-skill
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![AI Agent Skills](https://img.shields.io/badge/AI-Agent%20Skills-brightgreen.svg)](https://github.com/topics/ai-agent)
+[![Spec-Driven](https://img.shields.io/badge/Spec--Driven-Agentic%20Programming-orange.svg)](https://github.com/topics/agentic-programming)
+
+> **AI Agent Skills** for **Spec-Driven Agentic Programming** | Local-first backlog | Multi-agent collaboration | Durable decision trail
+
 **Local-first backlog + decision trail for agent collaboration.**  
 Turn chat-only context (trade-offs, decisions, why-not-that-option) into durable engineering assets, so your agent writes code only after capturing **what to do, why, and how to verify**.
 
@@ -11,7 +18,7 @@ This repo is meant to be used *with* an AI agent. The goal is not just to genera
 
 ### Copy/paste: agent instructions
 
-Paste this into your agent's system prompt / project instructions:
+Paste this into your agent's system prompt / project instructions, ex: `AGENTS.md`:
 
 ```text
 You are an engineering agent working in this repository.

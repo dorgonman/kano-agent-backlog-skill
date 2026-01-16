@@ -8,6 +8,7 @@ from .derived import DerivedStore, InMemoryDerivedStore
 from .refs import RefParser, RefResolver
 from .state import StateMachine, ReadyValidator, StateAction
 from .audit import AuditLog, WorklogEntry
+from .chunking import Chunk, ChunkingOptions, chunk_text, normalize_text, token_spans
 from .errors import (
     BacklogError,
     ConfigError,
@@ -41,6 +42,12 @@ __all__ = [
     # Audit
     "AuditLog",
     "WorklogEntry",
+    # Chunking
+    "Chunk",
+    "ChunkingOptions",
+    "chunk_text",
+    "normalize_text",
+    "token_spans",
     # Errors
     "BacklogError",
     "ConfigError",

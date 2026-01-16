@@ -28,6 +28,7 @@ from .commands import links as links_cmd  # noqa: E402
 from .commands import items as items_cmd  # noqa: E402
 from .commands import adr as adr_cmd  # noqa: E402
 from .commands import schema as schema_cmd  # noqa: E402
+from .commands import meta as meta_cmd  # noqa: E402
 from .commands import workset as workset_cmd  # noqa: E402
 from .commands import topic as topic_cmd  # noqa: E402
 from .commands import config_cmd as config_cmd  # noqa: E402
@@ -56,6 +57,7 @@ admin_cmd.app.add_typer(links_cmd.app, name="links", help="Link maintenance help
 admin_cmd.app.add_typer(items_cmd.app, name="items", help="Item maintenance helpers")
 admin_cmd.app.add_typer(adr_cmd.app, name="adr", help="ADR operations")
 admin_cmd.app.add_typer(schema_cmd.app, name="schema", help="Schema validation and fixing")
+admin_cmd.app.add_typer(meta_cmd.app, name="meta", help="Meta file helpers")
 app.command(name="doctor")(doctor_fn)
 
 

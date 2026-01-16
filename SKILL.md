@@ -42,6 +42,12 @@ Use this skill to:
   - Open a new Task/Bug when you will change code/docs/views/scripts.
   - Open an ADR (and link it) when a real trade-off or direction change is decided.
   - Otherwise, record the discussion in an existing Worklog; ask if unsure.
+- Ticket type selection (keep it lightweight):
+  - Epic: multi-release or multi-team milestone spanning multiple Features.
+  - Feature: a new capability that delivers multiple UserStories.
+  - UserStory: a single user-facing outcome that requires multiple Tasks.
+  - Task: a single focused implementation or doc change (typically one session).
+  - Example: "End-to-end embedding pipeline" = Epic; "Pluggable vector backend" = Feature; "MVP chunking pipeline" = UserStory; "Implement tokenizer adapter" = Task.
 - Bug vs Task triage (when fixing behavior):
   - If you are correcting a behavior that was previously marked `Done` and the behavior violates the original intent/acceptance (defect or regression), open a **Bug** and link it to the original item.
   - If the change is a new requirement/scope change beyond the original acceptance, open a **Task/UserStory** (or Feature) instead, and link it for traceability.

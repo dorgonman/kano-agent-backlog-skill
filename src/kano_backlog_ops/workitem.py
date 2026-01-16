@@ -78,6 +78,16 @@ class TrashItemResult:
     reason: Optional[str]
 
 
+@dataclass
+class ParentUpdateResult:
+    """Result of updating parent link."""
+    item_ref: str
+    old_parent: Optional[str]
+    new_parent: Optional[str]
+    path: Path
+    status: str
+
+
 _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
@@ -268,6 +278,53 @@ def _update_item_file_state(
     )
     lines = worklog.append_worklog_entry(lines, message, agent, model=model)
     frontmatter.write_lines(item_path, lines)
+
+
+def update_parent(
+    item_ref: str,
+    *,
+    parent: Optional[str],
+    agent: str,
+    model: Optional[str],
+    product: Optional[str],
+    backlog_root: Optional[Path],
+    apply: bool = False,
+) -> ParentUpdateResult:
+    """Update parent frontmatter field and append worklog."""
+    target_root, item_path = _resolve_item_path(
+        item_ref, product=product, backlog_root=backlog_root
+    )
+    lines = frontmatter.load_lines(item_path)
+    fm = frontmatter.parse_frontmatter(lines)
+    old_parent = fm.get("parent")
+    new_parent = parent or None
+    new_value = "null" if new_parent in (None, "", "null") else new_parent
+    status = "noop"
+
+    if (old_parent or "null") != new_value:
+        try:
+            lines = frontmatter.update_frontmatter_field(lines, "parent", new_value)
+        except ValueError:
+            lines = frontmatter.add_frontmatter_field_before_closing(lines, "parent", new_value)
+        today = item_utils.get_today()
+        try:
+            lines = frontmatter.update_frontmatter_field(lines, "updated", today)
+        except ValueError:
+            lines = frontmatter.add_frontmatter_field_before_closing(lines, "updated", today)
+        message = f"Parent updated: {old_parent or 'null'} -> {new_value}."
+        lines = worklog.append_worklog_entry(lines, message, agent, model=model)
+        status = "would-update"
+        if apply:
+            frontmatter.write_lines(item_path, lines)
+            status = "updated"
+
+    return ParentUpdateResult(
+        item_ref=item_ref,
+        old_parent=(old_parent if old_parent != "null" else None),
+        new_parent=(new_parent if new_value != "null" else None),
+        path=item_path,
+        status=status,
+    )
 
 
 def create_item(
