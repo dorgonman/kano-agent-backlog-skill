@@ -68,10 +68,8 @@ def _write_effective_config_artifact(
     overwrite: bool,
 ) -> Path:
     context_dict = _stringify_paths(ctx.model_dump())
-    # Provide project_root alias for clarity; drop platform_root to avoid confusion.
-    if "platform_root" in context_dict:
-        context_dict.setdefault("project_root", context_dict["platform_root"])
-        context_dict.pop("platform_root", None)
+    # project_root is already canonical in Context.
+
 
     payload = {
         "context": context_dict,

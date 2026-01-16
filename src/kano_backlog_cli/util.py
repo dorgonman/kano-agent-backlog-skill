@@ -55,8 +55,8 @@ def resolve_model(model: Optional[str]) -> tuple[str, bool]:
     return "unknown", True
 
 
-def find_platform_root(start: Optional[Path] = None) -> Path:
-    """Find repo platform root containing _kano/backlog."""
+def find_project_root(start: Optional[Path] = None) -> Path:
+    """Find repo project root containing _kano/backlog."""
     cur = (start or Path.cwd()).resolve()
     while True:
         if (cur / "_kano" / "backlog").exists():
@@ -66,9 +66,33 @@ def find_platform_root(start: Optional[Path] = None) -> Path:
         cur = cur.parent
 
 
-def resolve_product_root(product: Optional[str] = None, start: Optional[Path] = None) -> Path:
-    platform_root = find_platform_root(start)
-    backlog_root = platform_root / "_kano" / "backlog"
+def resolve_backlog_root(
+    start: Optional[Path] = None,
+    backlog_root_override: Optional[Path] = None,
+) -> Path:
+    """Resolve backlog root, honoring an explicit override when provided."""
+    if backlog_root_override:
+        candidate = Path(backlog_root_override).expanduser().resolve()
+        if (candidate / "_kano" / "backlog").exists():
+            backlog_root = candidate / "_kano" / "backlog"
+        else:
+            backlog_root = candidate
+        if not backlog_root.exists():
+            raise SystemExit(f"Backlog root override not found: {backlog_root}")
+        if not ((backlog_root / "products").exists() or (backlog_root / "items").exists()):
+            raise SystemExit(f"Backlog root override is invalid: {backlog_root}")
+        return backlog_root
+
+    project_root = find_project_root(start)
+    return project_root / "_kano" / "backlog"
+
+
+def resolve_product_root(
+    product: Optional[str] = None,
+    start: Optional[Path] = None,
+    backlog_root_override: Optional[Path] = None,
+) -> Path:
+    backlog_root = resolve_backlog_root(start, backlog_root_override)
     products_dir = backlog_root / "products"
     if product:
         root = products_dir / product

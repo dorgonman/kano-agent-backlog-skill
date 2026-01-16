@@ -15,6 +15,9 @@ This project uses Git tags as releases: `vX.Y.Z`.
 - First-run bootstrap (`scripts/backlog/bootstrap_init_project.py`) + templates to enable the backlog system in a repo.
 - `views.auto_refresh` config flag (default: true) to keep dashboards up to date automatically.
 
+### Documentation
+- Release notes for GitHub Releases: `skills/kano-agent-backlog-skill/docs/releases/0.0.1.md`.
+
 ### Changed
 - Unified generated dashboards to prefer SQLite when enabled/available and fall back to file scan.
 - Kept `scripts/backlog/view_generate_demo.py` self-contained; demo repo tool is a thin wrapper.

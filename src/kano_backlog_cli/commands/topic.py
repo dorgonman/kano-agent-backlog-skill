@@ -30,6 +30,7 @@ def create(
     name: str = typer.Argument(..., help="Topic name"),
     agent: str = typer.Option(..., "--agent", help="Agent identity"),
     no_notes: bool = typer.Option(False, "--no-notes", help="Skip creating notes.md"),
+    with_spec: bool = typer.Option(False, "--with-spec", help="Initialize spec/ directory with templates"),
     output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
 ):
     """Create a new topic."""
@@ -46,6 +47,7 @@ def create(
             name,
             agent=agent,
             create_notes=not no_notes,
+            create_spec=with_spec,
         )
     except TopicExistsError as exc:
         typer.echo(f"❌ {exc.message}", err=True)

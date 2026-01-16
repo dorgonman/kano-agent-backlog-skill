@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import List
 
 import typer
 
-from ..util import ensure_core_on_path, resolve_product_root, find_item_path_by_id
+from ..util import (
+    ensure_core_on_path,
+    resolve_backlog_root,
+    resolve_product_root,
+    find_item_path_by_id,
+)
 
 app = typer.Typer()
 
@@ -19,13 +25,18 @@ def _parse_tags(raw: str) -> List[str]:
 def read(
     item_id: str = typer.Argument(..., help="Display ID, e.g., KABSD-TSK-0001"),
     product: str | None = typer.Option(None, help="Product name under _kano/backlog/products"),
+    backlog_root_override: Path | None = typer.Option(
+        None,
+        "--backlog-root-override",
+        help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
+    ),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
     """Read a backlog item from the canonical store."""
     ensure_core_on_path()
     from kano_backlog_core.canonical import CanonicalStore
 
-    product_root = resolve_product_root(product)
+    product_root = resolve_product_root(product, backlog_root_override=backlog_root_override)
     store = CanonicalStore(product_root)
     item_path = find_item_path_by_id(store.items_root, item_id)
     item = store.read(item_path)
@@ -42,13 +53,18 @@ def read(
 def validate(
     item_id: str = typer.Argument(..., help="Display ID, e.g., KABSD-TSK-0001"),
     product: str | None = typer.Option(None, "--product", help="Product name"),
+    backlog_root_override: Path | None = typer.Option(
+        None,
+        "--backlog-root-override",
+        help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
+    ),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
     """Validate a work item against the Ready gate."""
     ensure_core_on_path()
     from kano_backlog_core.canonical import CanonicalStore
 
-    product_root = resolve_product_root(product)
+    product_root = resolve_product_root(product, backlog_root_override=backlog_root_override)
     store = CanonicalStore(product_root)
     item_path = find_item_path_by_id(store.items_root, item_id)
     item = store.read(item_path)
@@ -81,6 +97,7 @@ def _run_create_command(
     tags: str,
     agent: str,
     product: str | None,
+    backlog_root_override: Path | None,
     output_format: str,
 ) -> None:
     """Invoke the ops-layer create implementation and handle formatting."""
@@ -104,6 +121,7 @@ def _run_create_command(
     tag_list = _parse_tags(tags)
 
     try:
+        product_root = resolve_product_root(product, backlog_root_override=backlog_root_override)
         result = ops_create_item(
             item_type=type_map[type_key],
             title=title,
@@ -114,6 +132,7 @@ def _run_create_command(
             area=area,
             iteration=iteration,
             tags=tag_list,
+            backlog_root=product_root,
         )
     except FileNotFoundError as exc:
         typer.echo(f"❌ {exc}", err=True)
@@ -150,6 +169,11 @@ def create(
     tags: str = typer.Option("", "--tags", help="Comma-separated tags"),
     agent: str = typer.Option(..., "--agent", help="Agent name (for audit trail)"),
     product: str | None = typer.Option(None, "--product", help="Product name"),
+    backlog_root_override: Path | None = typer.Option(
+        None,
+        "--backlog-root-override",
+        help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
+    ),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
     """Create a new backlog work item (ops-backed implementation)."""
@@ -163,6 +187,7 @@ def create(
         tags=tags,
         agent=agent,
         product=product,
+        backlog_root_override=backlog_root_override,
         output_format=output_format,
     )
 
@@ -184,12 +209,17 @@ def set_ready(
         help="# Risks / Dependencies body",
     ),
     product: str | None = typer.Option(None, "--product", help="Product name"),
+    backlog_root_override: Path | None = typer.Option(
+        None,
+        "--backlog-root-override",
+        help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
+    ),
 ):
     """Set Ready-gate body sections for an existing item."""
     ensure_core_on_path()
     from kano_backlog_core.canonical import CanonicalStore
 
-    product_root = resolve_product_root(product)
+    product_root = resolve_product_root(product, backlog_root_override=backlog_root_override)
     store = CanonicalStore(product_root)
     item_path = find_item_path_by_id(store.items_root, item_id)
     item = store.read(item_path)
@@ -222,6 +252,11 @@ def update_state_command(
     message: str = typer.Option("", "--message", help="Worklog message"),
     model: str | None = typer.Option(None, "--model", help="Model used by agent (e.g., claude-sonnet-4.5, gpt-5.1)"),
     product: str | None = typer.Option(None, "--product", help="Product name"),
+    backlog_root_override: Path | None = typer.Option(
+        None,
+        "--backlog-root-override",
+        help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
+    ),
     sync_parent: bool = typer.Option(True, "--sync-parent/--no-sync-parent", help="Sync parent state forward"),
     refresh_dashboards: bool = typer.Option(True, "--refresh/--no-refresh", help="Refresh dashboards after update"),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
@@ -253,12 +288,8 @@ def update_state_command(
     try:
         from ..util import resolve_model
 
-        resolved_model, used_unknown = resolve_model(model)
-        if used_unknown:
-            typer.echo(
-                "Warning: model not provided; recording [model=unknown]. Set --model or env KANO_AGENT_MODEL/KANO_MODEL.",
-                err=True,
-            )
+        resolved_model, _ = resolve_model(model)
+        product_root = resolve_product_root(product, backlog_root_override=backlog_root_override)
         result = ops_update_state(
             item_ref=item_ref,
             new_state=item_state,
@@ -268,6 +299,7 @@ def update_state_command(
             product=product,
             sync_parent=sync_parent,
             refresh_dashboards=refresh_dashboards,
+            backlog_root=product_root,
         )
     except RuntimeError as exc:
         typer.echo(f"❌ {exc}", err=True)
@@ -303,6 +335,11 @@ def attach_artifact_command(
     shared: bool = typer.Option(True, "--shared/--no-shared", help="Store under _shared/artifacts when true"),
     agent: str = typer.Option(..., "--agent", help="Agent name (for audit trail)"),
     product: str | None = typer.Option(None, "--product", help="Product name"),
+    backlog_root_override: Path | None = typer.Option(
+        None,
+        "--backlog-root-override",
+        help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
+    ),
     note: str | None = typer.Option(None, "--note", help="Optional note to include in Worklog"),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
@@ -311,6 +348,7 @@ def attach_artifact_command(
     from kano_backlog_ops.artifacts import attach_artifact as ops_attach
 
     try:
+        backlog_root = resolve_backlog_root(backlog_root_override=backlog_root_override)
         result = ops_attach(
             item_ref=item_id,
             artifact_path=path,
@@ -318,6 +356,7 @@ def attach_artifact_command(
             shared=shared,
             agent=agent,
             note=note,
+            backlog_root=backlog_root,
         )
     except FileNotFoundError as exc:
         typer.echo(f"❌ {exc}", err=True)

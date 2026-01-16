@@ -24,7 +24,10 @@ from .commands import demo as demo_cmd  # noqa: E402
 from .commands import persona as persona_cmd  # noqa: E402
 from .commands import sandbox as sandbox_cmd  # noqa: E402
 from .commands import validate as validate_cmd  # noqa: E402
+from .commands import links as links_cmd  # noqa: E402
+from .commands import items as items_cmd  # noqa: E402
 from .commands import adr as adr_cmd  # noqa: E402
+from .commands import schema as schema_cmd  # noqa: E402
 from .commands import workset as workset_cmd  # noqa: E402
 from .commands import topic as topic_cmd  # noqa: E402
 from .commands import config_cmd as config_cmd  # noqa: E402
@@ -49,7 +52,10 @@ admin_cmd.app.add_typer(demo_cmd.app, name="demo", help="Demo data operations")
 admin_cmd.app.add_typer(persona_cmd.app, name="persona", help="Persona activity operations")
 admin_cmd.app.add_typer(sandbox_cmd.app, name="sandbox", help="Sandbox environment operations")
 admin_cmd.app.add_typer(validate_cmd.app, name="validate", help="Backlog validation helpers")
+admin_cmd.app.add_typer(links_cmd.app, name="links", help="Link maintenance helpers")
+admin_cmd.app.add_typer(items_cmd.app, name="items", help="Item maintenance helpers")
 admin_cmd.app.add_typer(adr_cmd.app, name="adr", help="ADR operations")
+admin_cmd.app.add_typer(schema_cmd.app, name="schema", help="Schema validation and fixing")
 app.command(name="doctor")(doctor_fn)
 
 

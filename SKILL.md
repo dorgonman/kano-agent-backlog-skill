@@ -45,6 +45,16 @@ Use this skill to:
 - Bug vs Task triage (when fixing behavior):
   - If you are correcting a behavior that was previously marked `Done` and the behavior violates the original intent/acceptance (defect or regression), open a **Bug** and link it to the original item.
   - If the change is a new requirement/scope change beyond the original acceptance, open a **Task/UserStory** (or Feature) instead, and link it for traceability.
+- Bug origin tracing (when diagnosing a defect/regression):
+  - Record **when the issue started** and the **evidence path** you used to determine it.
+  - Prefer VCS-backed evidence when available:
+    - last-known-good revision (commit hash or tag)
+    - first-known-bad revision (commit hash or tag)
+    - suspected introducing change(s) (commit hash) and why (e.g., `git blame` on specific lines)
+  - If git history is unavailable (zip export, shallow clone, missing remote), explicitly record that limitation and what alternative evidence you used (e.g., release notes, timestamps, reproduction reports).
+  - Keep evidence lightweight: record commit hashes + 1–2 line summaries; avoid pasting large diffs into Worklog. Attach artifacts when needed.
+  - Suggested Worklog template:
+    - `Bug origin: last_good=<sha|tag>, first_bad=<sha|tag>, suspect=<sha> (reason: blame <path>:<line>), evidence=<git log/blame/bisect|other>`
 - State ownership: the agent decides when to move items to InProgress or Done; humans observe and can add context.
 - State semantics: Proposed = needs discovery/confirmation; Planned = approved but not started; Ready gate applies before start.
 - Hierarchy is in frontmatter links, not folder nesting; avoid moving files to reflect scope changes.
@@ -228,6 +238,16 @@ Guideline: do not paste large `--help` output into chat; inspect it locally and 
   - `python skills/kano-agent-backlog-skill/scripts/kano-backlog view refresh --agent <id> --product <name>`
 - Backlog integrity checks:
   - `python skills/kano-agent-backlog-skill/scripts/kano-backlog admin validate uids --product <name>`
+
+## Conflict handling policy (configurable)
+
+Use product config to control how duplicate IDs and UIDs are handled by maintenance commands
+such as `admin links normalize-ids`.
+
+- Config keys (product `_config/config.toml`):
+  - `conflict_policy.id_conflict`: default `rename` (rename duplicate IDs).
+  - `conflict_policy.uid_conflict`: default `trash_shorter` (move shorter duplicate content to `_trash/`).
+- `trash_shorter` uses `_trash/<YYYYMMDD>/...` under the product root; items get a Worklog entry.
 
 ### Sandbox workflow (isolated experimentation)
 

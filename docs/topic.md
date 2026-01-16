@@ -71,6 +71,14 @@ Creates a new topic:
 - Validates topic name (alphanumeric, hyphens, underscores)
 - Creates `manifest.json` with empty seed_items/pinned_docs/snippet_refs
 - Creates `brief.md` template and topic subfolders
+- Creates `spec/` structure if `--with-spec` is used (requirements.md, design.md, tasks.md)
+
+### Create a Topic with Spec
+
+```bash
+kano topic create complex-feature --agent kiro --with-spec
+```
+This generates the **Spec Triad** (Requirements, Design, Tasks) in a specific `spec/` subdirectory, enabling rigorous feature definition (Medium-Term Memory).
 
 ### Add Items to Topic
 

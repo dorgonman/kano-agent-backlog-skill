@@ -15,36 +15,36 @@ class GitAdapter:
     def get_metadata(self, repo_root: Path) -> VcsMeta:
         """Get Git metadata."""
         try:
-            # Hash (commit hash)
-            commit_hash = subprocess.check_output(
+            # Get revision (commit hash)
+            revision = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"],
                 cwd=repo_root,
                 stderr=subprocess.DEVNULL,
-                text=True,
+                text=True
             ).strip()
-
-            # Branch (or HEAD for detached)
+            
+            # Get ref (branch or HEAD)
             try:
-                branch = subprocess.check_output(
+                ref = subprocess.check_output(
                     ["git", "symbolic-ref", "--short", "HEAD"],
                     cwd=repo_root,
                     stderr=subprocess.DEVNULL,
-                    text=True,
+                    text=True
                 ).strip()
             except subprocess.CalledProcessError:
-                branch = "HEAD"
-
-            # RevNo: human-friendly monotonic-ish number within the repo.
-            # For git we use commit count on HEAD.
+                ref = "HEAD"  # detached
+            
+            # Get label (describe)
+            label = None
             try:
-                revno = subprocess.check_output(
-                    ["git", "rev-list", "--count", "HEAD"],
+                label = subprocess.check_output(
+                    ["git", "describe", "--tags", "--always"],
                     cwd=repo_root,
                     stderr=subprocess.DEVNULL,
-                    text=True,
+                    text=True
                 ).strip()
             except subprocess.CalledProcessError:
-                revno = "unknown"
+                pass
             
             # Check if dirty
             try:
@@ -59,16 +59,15 @@ class GitAdapter:
             
             return VcsMeta(
                 provider="git",
-                branch=branch,
-                revno=revno,
-                hash=commit_hash,
+                revision=revision,
+                ref=ref,
+                label=label,
                 dirty=dirty
             )
         except Exception:
             return VcsMeta(
                 provider="git",
-                branch="unknown",
-                revno="unknown",
-                hash="unknown",
+                revision="unknown",
+                ref="unknown",
                 dirty="unknown"
             )

@@ -117,6 +117,7 @@ class TopicManifest:
     closed_at: Optional[str] = None  # ISO 8601 timestamp
     created_at: str = ""  # ISO 8601 timestamp
     updated_at: str = ""  # ISO 8601 timestamp
+    has_spec: bool = False  # verification flag
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -143,6 +144,7 @@ class TopicManifest:
             closed_at=data.get("closed_at"),
             created_at=data.get("created_at", ""),
             updated_at=data.get("updated_at", ""),
+            has_spec=data.get("has_spec", False),
         )
 
     def save(self, path: Path) -> None:
@@ -405,6 +407,7 @@ def create_topic(
     backlog_root: Optional[Path] = None,
     create_notes: bool = True,
     create_brief: bool = True,
+    create_spec: bool = False,
 ) -> TopicCreateResult:
     """
     Create a new topic with materials buffer structure.
@@ -427,6 +430,10 @@ def create_topic(
         topics/<topic>/
             manifest.json
             brief.md           (if create_brief=True)
+            spec/              (if create_spec=True)
+                requirements.md
+                design.md
+                tasks.md
             notes.md           (if create_notes=True, for backward compat)
             materials/
                 clips/         # code snippet refs + cached text
@@ -485,6 +492,7 @@ def create_topic(
         closed_at=None,
         created_at=timestamp,
         updated_at=timestamp,
+        has_spec=create_spec,
     )
 
     # Save manifest.json
@@ -502,6 +510,14 @@ def create_topic(
         notes_content = _generate_topic_notes_template(canonical_name)
         notes_path = topic_path / "notes.md"
         notes_path.write_text(notes_content, encoding="utf-8")
+
+    if create_spec:
+        spec_root = topic_path / "spec"
+        spec_root.mkdir(parents=True, exist_ok=True)
+        (spec_root / "requirements.md").write_text(_generate_spec_requirements_template(canonical_name), encoding="utf-8")
+        (spec_root / "design.md").write_text(_generate_spec_design_template(canonical_name), encoding="utf-8")
+        (spec_root / "tasks.md").write_text(_generate_spec_tasks_template(canonical_name), encoding="utf-8")
+        manifest.has_spec = True
 
     return TopicCreateResult(
         topic_path=topic_path,
@@ -579,6 +595,55 @@ Generated: {timestamp}
 
 ---
 _This brief is auto-generated. Edit after distill to finalize._
+"""
+
+
+def _generate_spec_requirements_template(topic_name: str) -> str:
+    return f"""# Requirements: {topic_name}
+
+## User Stories
+
+- As a [role], I want [feature], so that [benefit].
+
+## Acceptance Criteria
+
+### Requirement 1: [Feature Name]
+
+- [ ] 1.1 [Criterion]
+- [ ] 1.2 [Criterion]
+"""
+
+
+def _generate_spec_design_template(topic_name: str) -> str:
+    return f"""# Design: {topic_name}
+
+## Data Models
+
+```python
+# class Model: ...
+```
+
+## Interfaces
+
+```python
+# def function(): ...
+```
+
+## Correctness Properties (Invariants)
+
+- **Property 1**: [Description]
+  *Validates: Requirement 1.1*
+"""
+
+
+def _generate_spec_tasks_template(topic_name: str) -> str:
+    return f"""# Tasks: {topic_name}
+
+## Implementation Plan
+
+- [ ] 1. [Task Name]
+  - [ ] 1.1 [Subtask]
+  - Validates: Requirement 1
 """
 
 
@@ -723,6 +788,28 @@ def distill_topic(
         snippets_lines.append(f"- {s.file}{rng} ({s.hash})")
     snippets = "\n".join(snippets_lines) or "- (none)"
 
+    # Detect specs
+    spec_section = ""
+    spec_dir = topic_path / "spec"
+    if spec_dir.exists():
+        req_path = spec_dir / "requirements.md"
+        des_path = spec_dir / "design.md"
+        tsk_path = spec_dir / "tasks.md"
+        
+        spec_links = []
+        if req_path.exists(): spec_links.append("[Requirements](spec/requirements.md)")
+        if des_path.exists(): spec_links.append("[Design](spec/design.md)")
+        if tsk_path.exists(): spec_links.append("[Tasks](spec/tasks.md)")
+        
+        if spec_links:
+            spec_section = (
+                "## Specification\n\n"
+                f"{' | '.join(spec_links)}\n\n"
+            )
+            # Update manifest if needed
+            if not manifest.has_spec:
+                 manifest.has_spec = True
+
     brief = (
         f"# Topic Brief: {canonical_name}\n\n"
         f"Generated: {generated_at}\n\n"
@@ -740,6 +827,7 @@ def distill_topic(
         f"{items}\n\n"
         "### Pinned Docs\n"
         f"{docs}\n\n"
+        f"{spec_section}"
         "### Snippet Refs\n"
         f"{snippets}\n"
     )
