@@ -15,24 +15,36 @@ class GitAdapter:
     def get_metadata(self, repo_root: Path) -> VcsMeta:
         """Get Git metadata."""
         try:
-            # Get revision (commit hash)
-            revision = subprocess.check_output(
+            # Get hash (commit hash)
+            commit_hash = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"],
                 cwd=repo_root,
                 stderr=subprocess.DEVNULL,
                 text=True
             ).strip()
             
-            # Get ref (branch or HEAD)
+            # Get branch (or HEAD when detached)
             try:
-                ref = subprocess.check_output(
+                branch = subprocess.check_output(
                     ["git", "symbolic-ref", "--short", "HEAD"],
                     cwd=repo_root,
                     stderr=subprocess.DEVNULL,
                     text=True
                 ).strip()
             except subprocess.CalledProcessError:
-                ref = "HEAD"  # detached
+                branch = "HEAD"  # detached
+
+            # Get revno (commit count on HEAD)
+            revno = "unknown"
+            try:
+                revno = subprocess.check_output(
+                    ["git", "rev-list", "--count", "HEAD"],
+                    cwd=repo_root,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                ).strip()
+            except subprocess.CalledProcessError:
+                pass
             
             # Get label (describe)
             label = None
@@ -59,10 +71,13 @@ class GitAdapter:
             
             return VcsMeta(
                 provider="git",
-                revision=revision,
-                ref=ref,
+                revision=commit_hash,
+                ref=branch,
                 label=label,
-                dirty=dirty
+                dirty=dirty,
+                branch=branch,
+                revno=revno,
+                hash=commit_hash,
             )
         except Exception:
             return VcsMeta(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from .chunking import token_spans
 
@@ -69,6 +69,42 @@ class HeuristicTokenizer(TokenizerAdapter):
         return resolve_model_max_tokens(self._model_name)
 
 
+
+class TiktokenAdapter(TokenizerAdapter):
+    """Tokenizer using the tiktoken library (OpenAI models)."""
+
+    def __init__(self, model_name: str, encoding: Any = None, max_tokens: Optional[int] = None) -> None:
+        super().__init__(model_name, max_tokens)
+        if encoding:
+            self._encoding = encoding
+        else:
+            import tiktoken
+            try:
+                self._encoding = tiktoken.encoding_for_model(model_name)
+            except KeyError:
+                self._encoding = tiktoken.get_encoding("cl100k_base")
+
+    def count_tokens(self, text: str) -> TokenCount:
+        if text is None:
+            return TokenCount(0, "tiktoken", self._model_name, True)
+        
+        # tiktoken encode can fail on special tokens if not allowed, 
+        # but for counting we generally want to process them or ignore them.
+        # "all" allows special tokens.
+        tokens = self._encoding.encode(text, disallowed_special=())
+        return TokenCount(
+            count=len(tokens),
+            method="tiktoken",
+            tokenizer_id=f"tiktoken:{self._model_name}",
+            is_exact=True,
+        )
+
+    def max_tokens(self) -> int:
+        if self._max_tokens is not None:
+            return self._max_tokens
+        return resolve_model_max_tokens(self._model_name)
+
+
 def resolve_model_max_tokens(
     model_name: str,
     overrides: Optional[Dict[str, int]] = None,
@@ -91,4 +127,6 @@ def resolve_tokenizer(
     adapter = adapter_name.lower().strip()
     if adapter == "heuristic":
         return HeuristicTokenizer(model_name=model_name, max_tokens=max_tokens)
+    if adapter == "tiktoken":
+        return TiktokenAdapter(model_name=model_name, max_tokens=max_tokens)
     raise ValueError(f"Unknown tokenizer adapter: {adapter_name}")

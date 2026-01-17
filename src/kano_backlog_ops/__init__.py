@@ -86,6 +86,20 @@ from .topic import (
     TopicExistsError,
     TopicValidationError,
 )
+from .template import (
+    # Functions
+    create_topic_from_template,
+    get_available_templates,
+    get_template_info,
+    validate_template_by_name,
+    # Data models
+    TemplateListResult,
+    TemplateLoadResult,
+    # Errors
+    TemplateError,
+    TemplateNotFoundError,
+    TemplateValidationError,
+)
 
 __all__ = [
     # init
@@ -174,4 +188,16 @@ __all__ = [
     "TopicNotFoundError",
     "TopicExistsError",
     "TopicValidationError",
+    # template - functions
+    "create_topic_from_template",
+    "get_available_templates",
+    "get_template_info",
+    "validate_template_by_name",
+    # template - data models
+    "TemplateListResult",
+    "TemplateLoadResult",
+    # template - errors
+    "TemplateError",
+    "TemplateNotFoundError",
+    "TemplateValidationError",
 ]

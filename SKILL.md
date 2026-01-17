@@ -391,8 +391,19 @@ _kano/backlog/.cache/worksets/items/<ITEM_ID>/
 
 ### Human decision materials vs. machine manifest
 
-- Treat `manifest.json` as **machine-oriented** metadata (seed item UIDs, pinned doc paths, snippet refs).
-- Keep `brief.md` **deterministic** (generated/overwritten by `topic distill`).
+**Dual-Readability Design**: Every artifact checks against both human and agent readability:
+- **Human-Readable**: High-level summaries, clear checklists, "manager-friendly" reports for rapid decision-making
+- **Agent-Readable**: Structural precision, file paths, line numbers, explicit markers for action without hallucination
+
+**Implementation in Topics**:
+- Treat `manifest.json` as **machine-oriented** metadata:
+  - `seed_items`: UUID list for precise agent reference
+  - `snippet_refs`: file+line+hash for deterministic loading
+  - `pinned_docs`: absolute paths for unambiguous reference
+- Keep `brief.md` **human-oriented** and **deterministic** (generated/overwritten by `topic distill`):
+  - Readable item titles (e.g., "KABSD-TSK-0042: Implement tokenizer adapter")
+  - Context summary and key decisions
+  - Materials index with human-friendly descriptions
 - Put human-facing decision support in `_kano/backlog/topics/<topic>/notes.md` (and/or pinned docs), e.g.:
   - Decision to make
   - Options + trade-offs

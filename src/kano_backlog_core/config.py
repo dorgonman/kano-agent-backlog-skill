@@ -358,3 +358,11 @@ class ConfigLoader:
         # Compile human-friendly backend blocks into canonical URIs (local-first; no network calls)
         effective = compile_effective_config(effective, default_filesystem_root=ctx.project_root)
         return ctx, effective
+
+    @staticmethod
+    def validate_pipeline_config(config: dict[str, Any]) -> Any:
+        # Avoid circular import if possible, or Import here
+        from .pipeline_config import PipelineConfig
+        pc = PipelineConfig.from_dict(config)
+        pc.validate()
+        return pc

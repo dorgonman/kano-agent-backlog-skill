@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import hashlib
@@ -113,6 +113,7 @@ class TopicManifest:
     seed_items: List[str] = field(default_factory=list)  # List of item UIDs
     pinned_docs: List[str] = field(default_factory=list)  # List of document paths
     snippet_refs: List[SnippetRef] = field(default_factory=list)  # List of code snippet refs
+    related_topics: List[str] = field(default_factory=list)  # List of related topic names
     status: str = "open"  # open|closed
     closed_at: Optional[str] = None  # ISO 8601 timestamp
     created_at: str = ""  # ISO 8601 timestamp
@@ -140,6 +141,7 @@ class TopicManifest:
             seed_items=data.get("seed_items", []),
             pinned_docs=data.get("pinned_docs", []),
             snippet_refs=snippet_refs,
+            related_topics=data.get("related_topics", []),
             status=data.get("status", "open"),
             closed_at=data.get("closed_at"),
             created_at=data.get("created_at", ""),
@@ -226,6 +228,69 @@ class TopicCleanupResult:
     topics_cleaned: int
     materials_deleted: int
     deleted_paths: List[Path]
+
+
+@dataclass
+class TopicReopenResult:
+    topic: str
+    reopened: bool
+    reopened_at: str
+    previous_status: str
+
+
+@dataclass
+class TopicAddReferenceResult:
+    """Result of adding a topic reference."""
+    topic: str
+    referenced_topic: str
+    added: bool  # False if already referenced
+
+
+@dataclass
+class TopicRemoveReferenceResult:
+    """Result of removing a topic reference."""
+    topic: str
+    referenced_topic: str
+    removed: bool  # False if not referenced
+
+
+@dataclass
+class TopicSnapshot:
+    """Topic snapshot metadata and content."""
+    name: str  # Snapshot name
+    topic: str  # Topic name
+    created_at: str  # ISO 8601 timestamp
+    created_by: str  # Agent who created the snapshot
+    description: str  # User-provided description
+    manifest: TopicManifest  # Snapshot of manifest at time of creation
+    brief_content: Optional[str] = None  # Snapshot of brief.md content
+    notes_content: Optional[str] = None  # Snapshot of notes.md content
+    materials_index: Dict[str, str] = field(default_factory=dict)  # File path -> content hash
+
+
+@dataclass
+class TopicSnapshotResult:
+    """Result of creating a topic snapshot."""
+    topic: str
+    snapshot_name: str
+    snapshot_path: Path
+    created_at: str
+
+
+@dataclass
+class TopicRestoreResult:
+    """Result of restoring from a topic snapshot."""
+    topic: str
+    snapshot_name: str
+    restored_at: str
+    restored_components: List[str]  # List of components that were restored
+
+
+@dataclass
+class TopicSnapshotListResult:
+    """Result of listing topic snapshots."""
+    topic: str
+    snapshots: List[Dict[str, Any]]  # List of snapshot metadata
 
 
 # =============================================================================
@@ -788,6 +853,9 @@ def distill_topic(
         snippets_lines.append(f"- {s.file}{rng} ({s.hash})")
     snippets = "\n".join(snippets_lines) or "- (none)"
 
+    # Generate related topics section
+    related_topics = "\n".join(f"- {topic}" for topic in sorted(manifest.related_topics)) or "- (none)"
+
     # Detect specs
     spec_section = ""
     spec_dir = topic_path / "spec"
@@ -822,6 +890,8 @@ def distill_topic(
         "- [ ] {action} → {workitem ref or \"new ticket needed\"}\n\n"
         "## Decision Candidates\n\n"
         "- [ ] {decision} → {ADR ref or \"draft needed\"}\n\n"
+        "## Related Topics\n\n"
+        f"{related_topics}\n\n"
         "## Materials Index (Deterministic)\n\n"
         "### Items\n"
         f"{items}\n\n"
@@ -838,6 +908,51 @@ def distill_topic(
     manifest.updated_at = generated_at
     manifest.save(manifest_path)
     return brief_path
+
+
+def reopen_topic(
+    topic_name: str,
+    *,
+    agent: Optional[str] = None,
+    backlog_root: Optional[Path] = None,
+) -> TopicReopenResult:
+    """Reopen a closed topic for additional work.
+    
+    This allows resuming work on a previously closed topic,
+    useful for iterative development or when requirements change.
+    """
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    canonical_name = _normalize_topic_name(topic_name)
+    topic_path = get_topic_path(canonical_name, backlog_root)
+    manifest_path = topic_path / "manifest.json"
+    if not manifest_path.exists():
+        raise TopicNotFoundError(canonical_name)
+
+    manifest = TopicManifest.load(manifest_path)
+    previous_status = manifest.status
+    
+    if manifest.status == "open":
+        return TopicReopenResult(
+            topic=canonical_name, 
+            reopened=False, 
+            reopened_at=manifest.updated_at,
+            previous_status=previous_status
+        )
+
+    ts = _now_timestamp()
+    manifest.status = "open"
+    manifest.closed_at = None  # Clear closed timestamp
+    manifest.updated_at = ts
+    manifest.save(manifest_path)
+    
+    return TopicReopenResult(
+        topic=canonical_name, 
+        reopened=True, 
+        reopened_at=ts,
+        previous_status=previous_status
+    )
 
 
 def close_topic(
@@ -1335,3 +1450,637 @@ def list_topics(
             continue
 
     return topics
+
+
+def add_topic_reference(
+    topic_name: str,
+    referenced_topic: str,
+    *,
+    backlog_root: Optional[Path] = None,
+) -> TopicAddReferenceResult:
+    """
+    Add a reference from one topic to another with bidirectional linking.
+
+    Args:
+        topic_name: Source topic name
+        referenced_topic: Target topic name to reference
+        backlog_root: Root path for backlog
+
+    Returns:
+        TopicAddReferenceResult with reference details
+
+    Raises:
+        TopicNotFoundError: If either topic does not exist
+        TopicError: If trying to reference self or reference limit exceeded
+    """
+    # Resolve backlog root
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    # Normalize topic names
+    canonical_source = _normalize_topic_name(topic_name)
+    canonical_target = _normalize_topic_name(referenced_topic)
+
+    # Prevent self-reference
+    if canonical_source == canonical_target:
+        raise TopicError(
+            f"Cannot reference self: {topic_name}",
+            suggestion="Reference a different topic",
+        )
+
+    # Get topic paths and verify both exist
+    source_path = get_topic_path(canonical_source, backlog_root)
+    target_path = get_topic_path(canonical_target, backlog_root)
+    
+    source_manifest_path = source_path / "manifest.json"
+    target_manifest_path = target_path / "manifest.json"
+
+    if not source_manifest_path.exists():
+        raise TopicNotFoundError(canonical_source)
+    
+    if not target_manifest_path.exists():
+        raise TopicNotFoundError(canonical_target)
+
+    # Load both manifests
+    source_manifest = TopicManifest.load(source_manifest_path)
+    target_manifest = TopicManifest.load(target_manifest_path)
+
+    # Check if reference already exists
+    if canonical_target in source_manifest.related_topics:
+        return TopicAddReferenceResult(
+            topic=canonical_source,
+            referenced_topic=canonical_target,
+            added=False,
+        )
+
+    # Check reference limit (5-10 references to prevent overuse)
+    MAX_REFERENCES = 10
+    if len(source_manifest.related_topics) >= MAX_REFERENCES:
+        raise TopicError(
+            f"Reference limit exceeded: {len(source_manifest.related_topics)}/{MAX_REFERENCES}",
+            suggestion=f"Remove some references before adding new ones",
+        )
+
+    # Add bidirectional references
+    now = _now_timestamp()
+    
+    # Add forward reference (source -> target)
+    source_manifest.related_topics.append(canonical_target)
+    source_manifest.updated_at = now
+    source_manifest.save(source_manifest_path)
+
+    # Add backward reference (target -> source) if not already present
+    if canonical_source not in target_manifest.related_topics:
+        # Check target reference limit too
+        if len(target_manifest.related_topics) < MAX_REFERENCES:
+            target_manifest.related_topics.append(canonical_source)
+            target_manifest.updated_at = now
+            target_manifest.save(target_manifest_path)
+
+    return TopicAddReferenceResult(
+        topic=canonical_source,
+        referenced_topic=canonical_target,
+        added=True,
+    )
+
+
+def get_topic_snapshots_path(topic_name: str, backlog_root: Optional[Path] = None) -> Path:
+    """
+    Get the snapshots directory path for a topic.
+
+    Args:
+        topic_name: Topic name
+        backlog_root: Root path for backlog
+
+    Returns:
+        Path to _kano/backlog/topics/<topic-name>/snapshots/
+    """
+    topic_path = get_topic_path(topic_name, backlog_root)
+    return topic_path / "snapshots"
+
+
+def _generate_snapshot_filename(snapshot_name: str, timestamp: str) -> str:
+    """Generate a filename for a snapshot."""
+    # Use timestamp prefix for chronological ordering
+    timestamp_prefix = timestamp.replace(":", "").replace("-", "").replace(".", "")[:15]
+    safe_name = re.sub(r'[^\w\-_]', '_', snapshot_name)
+    return f"{timestamp_prefix}_{safe_name}.json"
+
+
+def _compress_content(content: str) -> bytes:
+    """Compress content using gzip."""
+    import gzip
+    return gzip.compress(content.encode('utf-8'))
+
+
+def _decompress_content(compressed_data: bytes) -> str:
+    """Decompress gzipped content."""
+    import gzip
+    return gzip.decompress(compressed_data).decode('utf-8')
+
+
+def get_topic_snapshots_path(topic_name: str, backlog_root: Optional[Path] = None) -> Path:
+    """
+    Get the snapshots directory path for a topic.
+
+    Args:
+        topic_name: Topic name
+        backlog_root: Root path for backlog
+
+    Returns:
+        Path to _kano/backlog/topics/<topic-name>/snapshots/
+    """
+    topic_path = get_topic_path(topic_name, backlog_root)
+    return topic_path / "snapshots"
+
+
+def _generate_snapshot_filename(snapshot_name: str, timestamp: str) -> str:
+    """Generate a filename for a snapshot."""
+    # Use timestamp prefix for chronological ordering
+    timestamp_prefix = timestamp.replace(":", "").replace("-", "").replace(".", "")[:15]
+    safe_name = re.sub(r'[^\w\-_]', '_', snapshot_name)
+    return f"{timestamp_prefix}_{safe_name}.json"
+
+
+def remove_topic_reference(
+    topic_name: str,
+    referenced_topic: str,
+    *,
+    backlog_root: Optional[Path] = None,
+) -> TopicRemoveReferenceResult:
+    """
+    Remove a reference from one topic to another with bidirectional cleanup.
+
+    Args:
+        topic_name: Source topic name
+        referenced_topic: Target topic name to unreference
+        backlog_root: Root path for backlog
+
+    Returns:
+        TopicRemoveReferenceResult with removal details
+
+    Raises:
+        TopicNotFoundError: If source topic does not exist
+    """
+    # Resolve backlog root
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    # Normalize topic names
+    canonical_source = _normalize_topic_name(topic_name)
+    canonical_target = _normalize_topic_name(referenced_topic)
+
+    # Get source topic path and verify it exists
+    source_path = get_topic_path(canonical_source, backlog_root)
+    source_manifest_path = source_path / "manifest.json"
+
+    if not source_manifest_path.exists():
+        raise TopicNotFoundError(canonical_source)
+
+    # Load source manifest
+    source_manifest = TopicManifest.load(source_manifest_path)
+
+    # Check if reference exists
+    if canonical_target not in source_manifest.related_topics:
+        return TopicRemoveReferenceResult(
+            topic=canonical_source,
+            referenced_topic=canonical_target,
+            removed=False,
+        )
+
+    # Remove forward reference (source -> target)
+    source_manifest.related_topics.remove(canonical_target)
+    source_manifest.updated_at = _now_timestamp()
+    source_manifest.save(source_manifest_path)
+
+    # Remove backward reference (target -> source) if target exists
+    target_path = get_topic_path(canonical_target, backlog_root)
+    target_manifest_path = target_path / "manifest.json"
+    
+    if target_manifest_path.exists():
+        try:
+            target_manifest = TopicManifest.load(target_manifest_path)
+            if canonical_source in target_manifest.related_topics:
+                target_manifest.related_topics.remove(canonical_source)
+                target_manifest.updated_at = _now_timestamp()
+                target_manifest.save(target_manifest_path)
+        except Exception:
+            # Ignore errors in backward cleanup - forward removal is primary
+            pass
+
+    return TopicRemoveReferenceResult(
+        topic=canonical_source,
+        referenced_topic=canonical_target,
+        removed=True,
+    )
+
+
+def create_topic_snapshot(
+    topic_name: str,
+    snapshot_name: str,
+    *,
+    description: str = "",
+    agent: str,
+    backlog_root: Optional[Path] = None,
+    include_materials: bool = True,
+) -> TopicSnapshotResult:
+    """
+    Create a snapshot of a topic's current state.
+
+    Args:
+        topic_name: Topic name
+        snapshot_name: Name for the snapshot
+        description: Optional description of the snapshot
+        agent: Agent creating the snapshot
+        backlog_root: Root path for backlog
+        include_materials: Whether to include materials in snapshot
+
+    Returns:
+        TopicSnapshotResult with snapshot details
+
+    Raises:
+        TopicNotFoundError: If topic does not exist
+        TopicError: If snapshot name is invalid or already exists
+    """
+    # Validate snapshot name
+    if not snapshot_name or not snapshot_name.strip():
+        raise TopicError("Snapshot name cannot be empty")
+    
+    snapshot_name = snapshot_name.strip()
+    if len(snapshot_name) > 64:
+        raise TopicError(f"Snapshot name too long ({len(snapshot_name)} chars, max 64)")
+
+    # Resolve backlog root
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    # Get topic path and verify it exists
+    canonical_name = _normalize_topic_name(topic_name)
+    topic_path = get_topic_path(canonical_name, backlog_root)
+    manifest_path = topic_path / "manifest.json"
+
+    if not manifest_path.exists():
+        raise TopicNotFoundError(canonical_name)
+
+    # Create snapshots directory
+    snapshots_path = get_topic_snapshots_path(canonical_name, backlog_root)
+    snapshots_path.mkdir(parents=True, exist_ok=True)
+
+    # Generate snapshot metadata
+    now = _now_timestamp()
+    snapshot_filename = _generate_snapshot_filename(snapshot_name, now)
+    snapshot_path = snapshots_path / snapshot_filename
+
+    # Check if snapshot already exists
+    if snapshot_path.exists():
+        raise TopicError(f"Snapshot '{snapshot_name}' already exists")
+
+    # Load current manifest
+    manifest = TopicManifest.load(manifest_path)
+
+    # Collect content
+    brief_content = None
+    brief_path = topic_path / "brief.md"
+    if brief_path.exists():
+        brief_content = brief_path.read_text(encoding="utf-8")
+
+    notes_content = None
+    notes_path = topic_path / "notes.md"
+    if notes_path.exists():
+        notes_content = notes_path.read_text(encoding="utf-8")
+
+    # Collect materials index if requested
+    materials_index = {}
+    if include_materials:
+        materials_path = topic_path / "materials"
+        if materials_path.exists():
+            for file_path in materials_path.rglob("*"):
+                if file_path.is_file():
+                    try:
+                        content = file_path.read_text(encoding="utf-8")
+                        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+                        rel_path = str(file_path.relative_to(materials_path))
+                        materials_index[rel_path] = content_hash
+                    except Exception:
+                        # Skip files that can't be read as text
+                        pass
+
+    # Create snapshot object
+    snapshot = TopicSnapshot(
+        name=snapshot_name,
+        topic=canonical_name,
+        created_at=now,
+        created_by=agent,
+        description=description,
+        manifest=manifest,
+        brief_content=brief_content,
+        notes_content=notes_content,
+        materials_index=materials_index,
+    )
+
+    # Save snapshot
+    snapshot_data = {
+        "name": snapshot.name,
+        "topic": snapshot.topic,
+        "created_at": snapshot.created_at,
+        "created_by": snapshot.created_by,
+        "description": snapshot.description,
+        "manifest": snapshot.manifest.to_dict(),
+        "brief_content": snapshot.brief_content,
+        "notes_content": snapshot.notes_content,
+        "materials_index": snapshot.materials_index,
+    }
+
+    with open(snapshot_path, "w", encoding="utf-8") as f:
+        json.dump(snapshot_data, f, indent=2, ensure_ascii=False)
+
+    return TopicSnapshotResult(
+        topic=canonical_name,
+        snapshot_name=snapshot_name,
+        snapshot_path=snapshot_path,
+        created_at=now,
+    )
+
+
+def list_topic_snapshots(
+    topic_name: str,
+    *,
+    backlog_root: Optional[Path] = None,
+) -> TopicSnapshotListResult:
+    """
+    List all snapshots for a topic.
+
+    Args:
+        topic_name: Topic name
+        backlog_root: Root path for backlog
+
+    Returns:
+        TopicSnapshotListResult with snapshot metadata
+
+    Raises:
+        TopicNotFoundError: If topic does not exist
+    """
+    # Resolve backlog root
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    # Get topic path and verify it exists
+    canonical_name = _normalize_topic_name(topic_name)
+    topic_path = get_topic_path(canonical_name, backlog_root)
+    manifest_path = topic_path / "manifest.json"
+
+    if not manifest_path.exists():
+        raise TopicNotFoundError(canonical_name)
+
+    # Get snapshots directory
+    snapshots_path = get_topic_snapshots_path(canonical_name, backlog_root)
+    
+    snapshots = []
+    if snapshots_path.exists():
+        for snapshot_file in sorted(snapshots_path.glob("*.json")):
+            try:
+                with open(snapshot_file, "r", encoding="utf-8") as f:
+                    snapshot_data = json.load(f)
+                
+                snapshots.append({
+                    "name": snapshot_data.get("name", ""),
+                    "created_at": snapshot_data.get("created_at", ""),
+                    "created_by": snapshot_data.get("created_by", ""),
+                    "description": snapshot_data.get("description", ""),
+                    "file_path": str(snapshot_file),
+                })
+            except Exception:
+                # Skip corrupted snapshot files
+                continue
+
+    return TopicSnapshotListResult(
+        topic=canonical_name,
+        snapshots=snapshots,
+    )
+
+
+def restore_topic_snapshot(
+    topic_name: str,
+    snapshot_name: str,
+    *,
+    agent: str,
+    backlog_root: Optional[Path] = None,
+    restore_manifest: bool = True,
+    restore_brief: bool = True,
+    restore_notes: bool = True,
+    backup_current: bool = True,
+) -> TopicRestoreResult:
+    """
+    Restore a topic from a snapshot.
+
+    Args:
+        topic_name: Topic name
+        snapshot_name: Name of the snapshot to restore
+        agent: Agent performing the restore
+        backlog_root: Root path for backlog
+        restore_manifest: Whether to restore manifest.json
+        restore_brief: Whether to restore brief.md
+        restore_notes: Whether to restore notes.md
+        backup_current: Whether to create a backup before restoring
+
+    Returns:
+        TopicRestoreResult with restore details
+
+    Raises:
+        TopicNotFoundError: If topic or snapshot does not exist
+        TopicError: If restore operation fails
+    """
+    # Resolve backlog root
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    # Get topic path and verify it exists
+    canonical_name = _normalize_topic_name(topic_name)
+    topic_path = get_topic_path(canonical_name, backlog_root)
+    manifest_path = topic_path / "manifest.json"
+
+    if not manifest_path.exists():
+        raise TopicNotFoundError(canonical_name)
+
+    # Find snapshot file
+    snapshots_path = get_topic_snapshots_path(canonical_name, backlog_root)
+    snapshot_file = None
+    
+    if snapshots_path.exists():
+        for candidate in snapshots_path.glob("*.json"):
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    snapshot_data = json.load(f)
+                if snapshot_data.get("name") == snapshot_name:
+                    snapshot_file = candidate
+                    break
+            except Exception:
+                continue
+
+    if not snapshot_file:
+        raise TopicError(f"Snapshot '{snapshot_name}' not found")
+
+    # Load snapshot data
+    try:
+        with open(snapshot_file, "r", encoding="utf-8") as f:
+            snapshot_data = json.load(f)
+    except Exception as e:
+        raise TopicError(f"Failed to load snapshot: {e}")
+
+    # Create backup if requested
+    if backup_current:
+        backup_name = f"auto_backup_before_{snapshot_name}_{_now_timestamp().replace(':', '').replace('-', '')[:15]}"
+        try:
+            create_topic_snapshot(
+                topic_name,
+                backup_name,
+                description=f"Automatic backup before restoring '{snapshot_name}'",
+                agent=agent,
+                backlog_root=backlog_root,
+            )
+        except Exception:
+            # Continue with restore even if backup fails
+            pass
+
+    # Perform restore operations
+    restored_components = []
+    now = _now_timestamp()
+
+    try:
+        # Restore manifest
+        if restore_manifest and "manifest" in snapshot_data:
+            manifest_data = snapshot_data["manifest"]
+            # Update timestamps to reflect restore
+            manifest_data["updated_at"] = now
+            
+            restored_manifest = TopicManifest.from_dict(manifest_data)
+            restored_manifest.save(manifest_path)
+            restored_components.append("manifest")
+
+        # Restore brief.md
+        if restore_brief and snapshot_data.get("brief_content"):
+            brief_path = topic_path / "brief.md"
+            brief_path.write_text(snapshot_data["brief_content"], encoding="utf-8")
+            restored_components.append("brief")
+
+        # Restore notes.md
+        if restore_notes and snapshot_data.get("notes_content"):
+            notes_path = topic_path / "notes.md"
+            notes_path.write_text(snapshot_data["notes_content"], encoding="utf-8")
+            restored_components.append("notes")
+
+    except Exception as e:
+        raise TopicError(f"Restore operation failed: {e}")
+
+    return TopicRestoreResult(
+        topic=canonical_name,
+        snapshot_name=snapshot_name,
+        restored_at=now,
+        restored_components=restored_components,
+    )
+
+
+def cleanup_topic_snapshots(
+    topic_name: str,
+    *,
+    ttl_days: int = 30,
+    keep_latest: int = 5,
+    backlog_root: Optional[Path] = None,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    """
+    Clean up old topic snapshots based on TTL and count limits.
+
+    Args:
+        topic_name: Topic name
+        ttl_days: Delete snapshots older than N days
+        keep_latest: Always keep N most recent snapshots
+        backlog_root: Root path for backlog
+        dry_run: If True, only report what would be deleted
+
+    Returns:
+        Dictionary with cleanup results
+
+    Raises:
+        TopicNotFoundError: If topic does not exist
+    """
+    # Resolve backlog root
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    # Get topic path and verify it exists
+    canonical_name = _normalize_topic_name(topic_name)
+    topic_path = get_topic_path(canonical_name, backlog_root)
+    manifest_path = topic_path / "manifest.json"
+
+    if not manifest_path.exists():
+        raise TopicNotFoundError(canonical_name)
+
+    # Get snapshots directory
+    snapshots_path = get_topic_snapshots_path(canonical_name, backlog_root)
+    
+    if not snapshots_path.exists():
+        return {
+            "topic": canonical_name,
+            "snapshots_scanned": 0,
+            "snapshots_deleted": 0,
+            "deleted_files": [],
+            "dry_run": dry_run,
+        }
+
+    # Collect snapshot files with metadata
+    snapshots = []
+    for snapshot_file in snapshots_path.glob("*.json"):
+        try:
+            with open(snapshot_file, "r", encoding="utf-8") as f:
+                snapshot_data = json.load(f)
+            
+            created_at = snapshot_data.get("created_at", "")
+            if created_at:
+                created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                snapshots.append({
+                    "file": snapshot_file,
+                    "name": snapshot_data.get("name", ""),
+                    "created_at": created_dt,
+                })
+        except Exception:
+            # Skip corrupted files
+            continue
+
+    # Sort by creation time (newest first)
+    snapshots.sort(key=lambda x: x["created_at"], reverse=True)
+
+    # Determine which snapshots to delete
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=ttl_days)
+    
+    to_delete = []
+    for i, snapshot in enumerate(snapshots):
+        # Always keep the latest N snapshots
+        if i < keep_latest:
+            continue
+        
+        # Delete if older than TTL
+        if snapshot["created_at"] < cutoff:
+            to_delete.append(snapshot)
+
+    # Perform deletion
+    deleted_files = []
+    if not dry_run:
+        for snapshot in to_delete:
+            try:
+                snapshot["file"].unlink()
+                deleted_files.append(str(snapshot["file"]))
+            except Exception:
+                # Continue with other deletions
+                pass
+    else:
+        deleted_files = [str(s["file"]) for s in to_delete]
+
+    return {
+        "topic": canonical_name,
+        "snapshots_scanned": len(snapshots),
+        "snapshots_deleted": len(deleted_files),
+        "deleted_files": deleted_files,
+        "dry_run": dry_run,
+    }

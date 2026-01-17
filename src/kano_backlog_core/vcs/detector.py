@@ -34,14 +34,16 @@ def format_vcs_metadata(meta: VcsMeta, mode: str = "min") -> str:
         return ""
     
     lines = ["<!-- kano:build"]
+    # KABSD-FTR-0039: fixed schema + field order for reproducible docs.
     lines.append(f"vcs.provider: {meta.provider}")
-    lines.append(f"vcs.revision: {meta.revision}")
+    lines.append(f"vcs.branch: {meta.branch}")
+    lines.append(f"vcs.revno: {meta.revno}")
+    lines.append(f"vcs.hash: {meta.hash}")
     lines.append(f"vcs.dirty: {meta.dirty}")
     
     if mode == "full":
-        lines.append(f"vcs.ref: {meta.ref}")
-        if meta.label:
-            lines.append(f"vcs.label: {meta.label}")
+        # Reserved for future expansions; keep stable output for now.
+        pass
     
     lines.append("-->")
     return "\n".join(lines)
