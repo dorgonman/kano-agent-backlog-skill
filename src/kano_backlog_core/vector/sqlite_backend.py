@@ -107,9 +107,57 @@ class SQLiteVectorBackend(VectorBackendAdapter):
     ) -> List[VectorQueryResult]:
         self._ensure_connection()
         
-        # Simple MVP: return empty results (vector search requires proper vec extension setup)
-        # Full implementation would use vec_search or similar
-        return []
+        # Fetch all chunks with vectors
+        cursor = self._conn.execute(f"""
+            SELECT chunk_id, text, metadata, vector 
+            FROM {self._collection}_chunks 
+            WHERE vector IS NOT NULL
+        """)
+        
+        results = []
+        for row in cursor:
+            chunk_id, text, metadata_json, vector_json = row
+            
+            # Deserialize vector
+            try:
+                stored_vector = json.loads(vector_json)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            
+            # Calculate cosine similarity
+            score = self._cosine_similarity(vector, stored_vector)
+            
+            # Parse metadata
+            try:
+                metadata = json.loads(metadata_json) if metadata_json else {}
+            except json.JSONDecodeError:
+                metadata = {}
+            
+            results.append(VectorQueryResult(
+                chunk_id=chunk_id,
+                score=score,
+                metadata=metadata,
+                text=text
+            ))
+        
+        # Sort by score (descending) and return top k
+        results.sort(key=lambda x: x.score, reverse=True)
+        return results[:k]
+    
+    @staticmethod
+    def _cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        if len(vec1) != len(vec2):
+            return 0.0
+        
+        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        mag1 = sum(a * a for a in vec1) ** 0.5
+        mag2 = sum(b * b for b in vec2) ** 0.5
+        
+        if mag1 == 0 or mag2 == 0:
+            return 0.0
+        
+        return dot_product / (mag1 * mag2)
     
     def persist(self) -> None:
         if self._conn:
