@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import hashlib
 import subprocess
 
@@ -335,6 +336,120 @@ class TopicMergePlan:
 
 
 # =============================================================================
+# Shared Topic State (KABSD-TSK-0257)
+# =============================================================================
+
+
+@dataclass
+class AgentTopicState:
+    """State of active topic for a single agent."""
+    agent_id: str  # Stable Kano agent ID (e.g., 'copilot', 'codex')
+    active_topic_id: Optional[str] = None  # UUIDv7 of active topic, or None
+    updated_at: str = ""  # ISO 8601 timestamp (set automatically)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentTopicState":
+        return cls(
+            agent_id=data["agent_id"],
+            active_topic_id=data.get("active_topic_id"),
+            updated_at=data.get("updated_at", ""),
+        )
+
+
+@dataclass
+class StateIndex:
+    """Global index for shared topic state (state.json)."""
+    version: int = 1  # Format version (future-proofing)
+    repo_id: str = ""  # sha256(normalized absolute repo root)
+    agents: Dict[str, AgentTopicState] = field(default_factory=dict)  # agent_id -> AgentTopicState
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "version": self.version,
+            "repo_id": self.repo_id,
+            "agents": {agent_id: state.to_dict() for agent_id, state in self.agents.items()},
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "StateIndex":
+        agents = {
+            agent_id: AgentTopicState.from_dict(state_data)
+            for agent_id, state_data in data.get("agents", {}).items()
+        }
+        return cls(
+            version=data.get("version", 1),
+            repo_id=data.get("repo_id", ""),
+            agents=agents,
+        )
+
+    def save(self, path: Path) -> None:
+        """Save state index to JSON file (atomic write)."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Write to temp file first, then atomic rename to avoid corruption
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        # Atomic rename (on POSIX; on Windows, replaces target)
+        temp_path.replace(path)
+
+    @classmethod
+    def load(cls, path: Path) -> "StateIndex":
+        """Load state index from JSON file."""
+        if not path.exists():
+            return cls()
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+
+@dataclass
+class TopicStateDocument:
+    """Metadata for a topic in the shared state store (topics/{topic_id}.json)."""
+    topic_id: str  # UUIDv7
+    name: str  # Topic name (canonical, lowercase)
+    participants: List[str] = field(default_factory=list)  # List of agent IDs
+    status: str = "active"  # active | closed
+    created_at: str = ""  # ISO 8601
+    updated_at: str = ""  # ISO 8601
+    created_by: str = ""  # Agent ID who created
+    description: str = ""  # Optional user-provided description
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TopicStateDocument":
+        return cls(
+            topic_id=data["topic_id"],
+            name=data.get("name", ""),
+            participants=data.get("participants", []),
+            status=data.get("status", "active"),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+            created_by=data.get("created_by", ""),
+            description=data.get("description", ""),
+        )
+
+    def save(self, path: Path) -> None:
+        """Save topic state document to JSON file (atomic write)."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        temp_path.replace(path)
+
+    @classmethod
+    def load(cls, path: Path) -> "TopicStateDocument":
+        """Load topic state document from JSON file."""
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+
+# =============================================================================
 # Topic Name Validation (Task 8.3)
 # =============================================================================
 
@@ -400,6 +515,516 @@ def is_valid_topic_name(topic_name: str) -> bool:
         True if valid, False otherwise
     """
     return len(validate_topic_name(topic_name)) == 0
+
+
+# =============================================================================
+# Shared State Store Functions (KABSD-TSK-0257)
+# =============================================================================
+
+
+def _compute_repo_id(backlog_root: Path) -> str:
+    """
+    Compute deterministic repo identifier from normalized absolute repo root.
+
+    Args:
+        backlog_root: Path to _kano/backlog
+
+    Returns:
+        sha256 hash of normalized repo root path (hex string)
+
+    Note:
+        Normalization handles Windows case-insensitivity and UNC paths.
+    """
+    repo_root = backlog_root.parent.parent  # Go up from _kano/backlog to repo root
+    # Normalize: absolute, case-lower on Windows, forward slashes
+    normalized = str(repo_root.resolve()).lower().replace("\\", "/")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def get_state_store_path(backlog_root: Optional[Path] = None) -> Path:
+    """
+    Get the path to the shared state store (state.json).
+
+    Args:
+        backlog_root: Root path for backlog
+
+    Returns:
+        Path to _kano/backlog/.cache/worksets/state.json
+    """
+    if backlog_root is None:
+        backlog_root = Path.cwd() / "_kano" / "backlog"
+    return backlog_root / ".cache" / "worksets" / "state.json"
+
+
+def get_state_topics_dir(backlog_root: Optional[Path] = None) -> Path:
+    """
+    Get the directory for topic state documents.
+
+    Args:
+        backlog_root: Root path for backlog
+
+    Returns:
+        Path to _kano/backlog/.cache/worksets/topics/
+    """
+    if backlog_root is None:
+        backlog_root = Path.cwd() / "_kano" / "backlog"
+    return backlog_root / ".cache" / "worksets" / "topics"
+
+
+def load_state_index(backlog_root: Optional[Path] = None) -> StateIndex:
+    """
+    Load the global state index from state.json.
+
+    Args:
+        backlog_root: Root path for backlog
+
+    Returns:
+        StateIndex (empty if file doesn't exist or is invalid)
+
+    Note:
+        Never raises; returns empty state on any error (graceful degradation).
+    """
+    if backlog_root is None:
+        try:
+            backlog_root = _find_backlog_root()
+        except TopicError:
+            return StateIndex()
+
+    state_path = get_state_store_path(backlog_root)
+    try:
+        state = StateIndex.load(state_path)
+        # Validate and set repo_id if missing
+        if not state.repo_id:
+            state.repo_id = _compute_repo_id(backlog_root)
+        return state
+    except Exception:
+        # Gracefully return empty state on any read error
+        return StateIndex(repo_id=_compute_repo_id(backlog_root))
+
+
+def save_state_index(state: StateIndex, backlog_root: Optional[Path] = None) -> None:
+    """
+    Save the global state index to state.json (atomic write).
+
+    Args:
+        state: StateIndex to save
+        backlog_root: Root path for backlog
+
+    Note:
+        Uses atomic rename to minimize corruption risk.
+    """
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    state_path = get_state_store_path(backlog_root)
+    state.save(state_path)
+
+
+def load_topic_state(topic_id: str, backlog_root: Optional[Path] = None) -> Optional[TopicStateDocument]:
+    """
+    Load a topic state document from topics/*_{topic_id}.json.
+
+    Supports both formats:
+    - New: {slug}_{uuid}.json
+    - Legacy: {uuid}.json
+
+    Args:
+        topic_id: Topic UUID
+        backlog_root: Root path for backlog
+
+    Returns:
+        TopicStateDocument or None if not found
+
+    Note:
+        Never raises; returns None on any error.
+    """
+    if backlog_root is None:
+        backlog_root = Path.cwd() / "_kano" / "backlog"
+
+    topics_dir = get_state_topics_dir(backlog_root)
+    
+    # Try new format first: *_{topic_id}.json
+    try:
+        for topic_file in topics_dir.glob(f"*_{topic_id}.json"):
+            return TopicStateDocument.load(topic_file)
+    except Exception:
+        pass
+    
+    # Fallback to legacy format: {topic_id}.json
+    try:
+        legacy_path = topics_dir / f"{topic_id}.json"
+        if legacy_path.exists():
+            return TopicStateDocument.load(legacy_path)
+    except Exception:
+        pass
+    
+    return None
+
+
+def save_topic_state(doc: TopicStateDocument, backlog_root: Optional[Path] = None) -> None:
+    """
+    Save a topic state document to topics/{slug}_{topic_id}.json (atomic write).
+
+    Uses human-readable slug prefix for better discoverability.
+    Format: {topic-name}_{uuid}.json
+
+    Args:
+        doc: TopicStateDocument to save
+        backlog_root: Root path for backlog
+    """
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    topics_dir = get_state_topics_dir(backlog_root)
+    # Use slug_uuid format for human readability
+    topic_path = topics_dir / f"{doc.name}_{doc.topic_id}.json"
+    doc.save(topic_path)
+
+
+def generate_topic_id() -> str:
+    """
+    Generate a new topic ID using UUIDv7 (time-based, sortable).
+
+    Returns:
+        UUIDv7 as string
+    """
+    return str(uuid.uuid7())
+
+
+def migrate_legacy_active_topics(backlog_root: Optional[Path] = None) -> Dict[str, str]:
+    """
+    Migrate legacy active_topic.<agent>.txt files to shared state.json.
+
+    This function:
+    1. Scans for all active_topic.<agent>.txt files in .cache/worksets/
+    2. Reads each file to get the active topic name
+    3. Creates corresponding entries in state.json and topic state documents
+    4. Does NOT delete legacy files (they coexist for compatibility)
+
+    Args:
+        backlog_root: Root path for backlog
+
+    Returns:
+        Dict mapping agent_id -> topic_name for agents that were migrated
+
+    Note:
+        Gracefully handles missing files or corrupt data; never raises.
+    """
+    if backlog_root is None:
+        try:
+            backlog_root = _find_backlog_root()
+        except TopicError:
+            return {}
+
+    migrated: Dict[str, str] = {}
+    worksets_dir = backlog_root / ".cache" / "worksets"
+
+    if not worksets_dir.exists():
+        return migrated
+
+    # Find all active_topic.<agent>.txt files
+    for legacy_file in worksets_dir.glob("active_topic.*.txt"):
+        try:
+            # Extract agent ID from filename
+            filename = legacy_file.name  # e.g., "active_topic.copilot.txt"
+            agent_id = filename.replace("active_topic.", "").replace(".txt", "")
+
+            # Read topic name
+            topic_name = _normalize_topic_name(legacy_file.read_text(encoding="utf-8"))
+            if not topic_name:
+                continue
+
+            # Check if topic exists
+            topic_path = get_topic_path(topic_name, backlog_root)
+            if not topic_path.exists() or not (topic_path / "manifest.json").exists():
+                continue
+
+            # Load shared state
+            state = load_state_index(backlog_root)
+
+            # Find or create topic state document
+            topic_id = None
+            topics_dir = get_state_topics_dir(backlog_root)
+            if topics_dir.exists():
+                for topic_file in topics_dir.glob("*.json"):
+                    try:
+                        doc = TopicStateDocument.load(topic_file)
+                        if doc.name == topic_name:
+                            topic_id = doc.topic_id
+                            break
+                    except Exception:
+                        pass
+
+            # Create new topic state if not found
+            if not topic_id:
+                topic_id = generate_topic_id()
+                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                topic_doc = TopicStateDocument(
+                    topic_id=topic_id,
+                    name=topic_name,
+                    participants=[agent_id],
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                    created_by=agent_id,
+                )
+                save_topic_state(topic_doc, backlog_root)
+            else:
+                # Update existing topic state to add participant
+                topic_doc = load_topic_state(topic_id, backlog_root)
+                if topic_doc and agent_id not in topic_doc.participants:
+                    topic_doc.participants.append(agent_id)
+                    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    topic_doc.updated_at = now
+                    save_topic_state(topic_doc, backlog_root)
+
+            # Update shared state
+            now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            agent_state = AgentTopicState(
+                agent_id=agent_id,
+                active_topic_id=topic_id,
+                updated_at=now,
+            )
+            state.agents[agent_id] = agent_state
+            save_state_index(state, backlog_root)
+
+            migrated[agent_id] = topic_name
+        except Exception:
+            # Skip on any error for individual file
+            continue
+
+    return migrated
+
+
+def cleanup_legacy_active_topics(backlog_root: Optional[Path] = None, dry_run: bool = False) -> List[Path]:
+    """
+    Remove all legacy active_topic.<agent>.txt files after migration.
+
+    Args:
+        backlog_root: Root path for backlog
+        dry_run: If True, return paths but don't delete
+
+    Returns:
+        List of deleted (or would-be deleted) file paths
+
+    Note:
+        Safe to call even if files don't exist; gracefully handles errors.
+    """
+    if backlog_root is None:
+        try:
+            backlog_root = _find_backlog_root()
+        except TopicError:
+            return []
+
+    deleted: List[Path] = []
+    worksets_dir = backlog_root / ".cache" / "worksets"
+
+    if not worksets_dir.exists():
+        return deleted
+
+    for legacy_file in worksets_dir.glob("active_topic.*.txt"):
+        try:
+            if not dry_run:
+                legacy_file.unlink()
+            deleted.append(legacy_file)
+        except Exception:
+            pass
+
+    return deleted
+
+
+def migrate_topic_state_filenames(backlog_root: Optional[Path] = None, dry_run: bool = False) -> Dict[str, str]:
+    """
+    Migrate topic state files from {uuid}.json to {slug}_{uuid}.json format.
+
+    Args:
+        backlog_root: Root path for backlog
+        dry_run: If True, return what would be renamed but don't actually rename
+
+    Returns:
+        Dict mapping old_filename -> new_filename for renamed files
+
+    Note:
+        Skips files already in new format; gracefully handles errors.
+    """
+    if backlog_root is None:
+        try:
+            backlog_root = _find_backlog_root()
+        except TopicError:
+            return {}
+
+    renamed: Dict[str, str] = {}
+    topics_dir = get_state_topics_dir(backlog_root)
+
+    if not topics_dir.exists():
+        return renamed
+
+    for topic_file in topics_dir.glob("*.json"):
+        try:
+            # Skip if already in new format (contains underscore before .json)
+            stem = topic_file.stem
+            if "_" in stem:
+                continue
+
+            # Load document to get the topic name
+            doc = TopicStateDocument.load(topic_file)
+            
+            # Generate new filename: {slug}_{uuid}.json
+            new_filename = f"{doc.name}_{doc.topic_id}.json"
+            new_path = topics_dir / new_filename
+
+            # Skip if target already exists
+            if new_path.exists():
+                continue
+
+            if not dry_run:
+                topic_file.rename(new_path)
+            
+            renamed[topic_file.name] = new_filename
+        except Exception:
+            # Skip on any error for individual file
+            continue
+
+    return renamed
+
+
+def list_active_topics(backlog_root: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    List all active topics across all agents in the shared state.
+
+    Args:
+        backlog_root: Root path for backlog
+
+    Returns:
+        Dict mapping agent_id -> {topic_name, topic_id, updated_at}
+        or empty dict if no active topics
+
+    Note:
+        Returns empty dict gracefully if state is unreadable.
+    """
+    if backlog_root is None:
+        try:
+            backlog_root = _find_backlog_root()
+        except TopicError:
+            return {}
+
+    result: Dict[str, Dict[str, Any]] = {}
+
+    try:
+        state = load_state_index(backlog_root)
+        for agent_id, agent_state in state.agents.items():
+            if agent_state.active_topic_id:
+                topic_doc = load_topic_state(agent_state.active_topic_id, backlog_root)
+                if topic_doc:
+                    result[agent_id] = {
+                        "topic_name": topic_doc.name,
+                        "topic_id": agent_state.active_topic_id,
+                        "updated_at": agent_state.updated_at,
+                        "participants": topic_doc.participants,
+                    }
+    except Exception:
+        pass
+
+    return result
+
+
+def get_topic_state_by_name(
+    topic_name: str,
+    backlog_root: Optional[Path] = None,
+) -> Optional[TopicStateDocument]:
+    """
+    Get the topic state document for a given topic name.
+
+    Optimized to use slug-based filename when available.
+
+    Args:
+        topic_name: Topic name (canonical)
+        backlog_root: Root path for backlog
+
+    Returns:
+        TopicStateDocument or None if not found
+
+    Note:
+        Returns None gracefully if topic doesn't exist.
+    """
+    if backlog_root is None:
+        try:
+            backlog_root = _find_backlog_root()
+        except TopicError:
+            return None
+
+    canonical_name = _normalize_topic_name(topic_name)
+    topics_dir = get_state_topics_dir(backlog_root)
+
+    if not topics_dir.exists():
+        return None
+
+    try:
+        # Fast path: try slug-based filename first
+        for topic_file in topics_dir.glob(f"{canonical_name}_*.json"):
+            doc = TopicStateDocument.load(topic_file)
+            if doc.name == canonical_name:
+                return doc
+        
+        # Fallback: scan all files (for legacy format)
+        for topic_file in topics_dir.glob("*.json"):
+            # Skip already checked files
+            if topic_file.stem.startswith(f"{canonical_name}_"):
+                continue
+            doc = TopicStateDocument.load(topic_file)
+            if doc.name == canonical_name:
+                return doc
+    except Exception:
+        pass
+
+    return None
+
+
+def update_agent_state(
+    agent_id: str,
+    active_topic_name: Optional[str] = None,
+    backlog_root: Optional[Path] = None,
+) -> AgentTopicState:
+    """
+    Update an agent's active topic state in the shared state.
+
+    Args:
+        agent_id: Agent identity
+        active_topic_name: Topic name to activate, or None to deactivate
+        backlog_root: Root path for backlog
+
+    Returns:
+        Updated AgentTopicState
+
+    Raises:
+        TopicNotFoundError: If topic_name is given but topic doesn't exist
+    """
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    # Load shared state
+    state = load_state_index(backlog_root)
+
+    # Resolve topic_id if topic_name is given
+    topic_id = None
+    if active_topic_name:
+        canonical_name = _normalize_topic_name(active_topic_name)
+        topic_doc = get_topic_state_by_name(canonical_name, backlog_root)
+        if not topic_doc:
+            raise TopicNotFoundError(canonical_name)
+        topic_id = topic_doc.topic_id
+
+    # Update agent state
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    agent_state = AgentTopicState(
+        agent_id=agent_id,
+        active_topic_id=topic_id,
+        updated_at=now,
+    )
+    state.agents[agent_id] = agent_state
+    save_state_index(state, backlog_root)
+
+    return agent_state
 
 
 # =============================================================================
@@ -883,7 +1508,68 @@ def distill_topic(
     manifest = TopicManifest.load(manifest_path)
     generated_at = _now_timestamp()
 
-    items = "\n".join(f"- {uid}" for uid in sorted(manifest.seed_items)) or "- (none)"
+    def _to_posix_path(path: Path) -> str:
+        return str(path).replace("\\", "/")
+
+    def _try_render_seed_item(uid: str) -> Optional[Tuple[str, str]]:
+        """Render a seed item as a human-readable line for brief.md.
+
+        Returns:
+            Tuple of (sort_key, line) or None if item cannot be resolved.
+        """
+        from kano_backlog_ops.workset import _resolve_item_ref
+
+        try:
+            item_path, metadata = _resolve_item_ref(uid, backlog_root)
+        except Exception:
+            return None
+
+        item_id = str(metadata.get("id") or "").strip()
+        title = str(metadata.get("title") or "").strip()
+        item_type = str(metadata.get("type") or "").strip()
+        state = str(metadata.get("state") or "").strip()
+
+        # Prefer repo-relative paths for readability/clickability.
+        try:
+            repo_root = backlog_root.parent.parent
+            item_path = item_path.relative_to(repo_root)
+        except Exception:
+            pass
+
+        details = ", ".join([p for p in [item_type or None, state or None] if p])
+        details_suffix = f" ({details})" if details else ""
+
+        if item_id and title:
+            headline = f"{item_id}: {title}"
+            sort_key = item_id
+        elif item_id:
+            headline = item_id
+            sort_key = item_id
+        elif title:
+            headline = title
+            sort_key = title
+        else:
+            return None
+
+        # Keep UID available for deterministic cross-reference without cluttering
+        # the human-readable listing.
+        line = f"- {headline}{details_suffix} - `{_to_posix_path(item_path)}` <!-- uid: {uid} -->"
+        return sort_key, line
+
+    rendered_items: List[Tuple[str, str]] = []
+    unresolved_uids: List[str] = []
+    for uid in sorted(manifest.seed_items):
+        rendered = _try_render_seed_item(uid)
+        if rendered is None:
+            unresolved_uids.append(uid)
+        else:
+            rendered_items.append(rendered)
+
+    rendered_items_sorted = [line for _, line in sorted(rendered_items, key=lambda x: x[0])]
+    if unresolved_uids:
+        rendered_items_sorted.extend([f"- {uid}" for uid in sorted(unresolved_uids)])
+
+    items = "\n".join(rendered_items_sorted) or "- (none)"
     docs = "\n".join(f"- {p}" for p in sorted(manifest.pinned_docs)) or "- (none)"
     snippets_lines: List[str] = []
     for s in sorted(
@@ -1268,11 +1954,14 @@ def switch_topic(
     backlog_root: Optional[Path] = None,
 ) -> TopicSwitchResult:
     """
-    Switch active topic for an agent.
+    Switch active topic for an agent (KABSD-TSK-0257).
+
+    Updates both the shared state.json and legacy active_topic.<agent>.txt
+    for backward compatibility.
 
     Args:
         topic_name: Topic name to switch to
-        agent: Agent identity
+        agent: Agent identity (e.g., 'copilot', 'codex')
         backlog_root: Root path for backlog
 
     Returns:
@@ -1285,7 +1974,7 @@ def switch_topic(
     if backlog_root is None:
         backlog_root = _find_backlog_root()
 
-    # Get topic path and verify it exists (Requirement 9.3)
+    # Get topic path and verify it exists
     canonical_name = _normalize_topic_name(topic_name)
     topic_path = get_topic_path(canonical_name, backlog_root)
     manifest_path = topic_path / "manifest.json"
@@ -1299,15 +1988,62 @@ def switch_topic(
     # Get previous active topic (if any)
     previous_topic = get_active_topic(agent, backlog_root=backlog_root)
 
-    # Write topic name to active_topic.<agent>.txt (Requirement 9.1)
+    # Load shared state (KABSD-TSK-0257)
+    state = load_state_index(backlog_root)
+
+    # Find or create topic state document
+    # First check if there's already a state doc for this topic
+    topic_id = None
+    topics_dir = get_state_topics_dir(backlog_root)
+    if topics_dir.exists():
+        for topic_file in topics_dir.glob("*.json"):
+            try:
+                doc = TopicStateDocument.load(topic_file)
+                if doc.name == canonical_name:
+                    topic_id = doc.topic_id
+                    break
+            except Exception:
+                pass
+
+    # If no existing topic state, create new one
+    if not topic_id:
+        topic_id = generate_topic_id()
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        topic_doc = TopicStateDocument(
+            topic_id=topic_id,
+            name=canonical_name,
+            participants=[agent],
+            status="active",
+            created_at=now,
+            updated_at=now,
+            created_by=agent,
+        )
+        save_topic_state(topic_doc, backlog_root)
+    else:
+        # Update existing topic state to add participant if needed
+        topic_doc = load_topic_state(topic_id, backlog_root)
+        if topic_doc and agent not in topic_doc.participants:
+            topic_doc.participants.append(agent)
+            now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            topic_doc.updated_at = now
+            save_topic_state(topic_doc, backlog_root)
+
+    # Update agent state in shared state.json
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    agent_state = AgentTopicState(
+        agent_id=agent,
+        active_topic_id=topic_id,
+        updated_at=now,
+    )
+    state.agents[agent] = agent_state
+    save_state_index(state, backlog_root)
+
+    # Also update legacy active_topic.<agent>.txt for backward compatibility
     active_topic_path = get_active_topic_path(agent, backlog_root)
-    
-    # Ensure parent directory exists
     active_topic_path.parent.mkdir(parents=True, exist_ok=True)
-    
     active_topic_path.write_text(canonical_name, encoding="utf-8")
 
-    # Return summary with item count and pinned doc count (Requirement 9.2)
+    # Return summary with item count and pinned doc count
     return TopicSwitchResult(
         topic=canonical_name,
         item_count=len(manifest.seed_items),
@@ -1322,14 +2058,20 @@ def get_active_topic(
     backlog_root: Optional[Path] = None,
 ) -> Optional[str]:
     """
-    Get current active topic for an agent.
+    Get current active topic for an agent (KABSD-TSK-0257).
+
+    Tries to read from shared state.json first, then falls back to
+    legacy active_topic.<agent>.txt for backward compatibility.
 
     Args:
-        agent: Agent identity
+        agent: Agent identity (e.g., 'copilot', 'codex')
         backlog_root: Root path for backlog
 
     Returns:
         Topic name or None if no active topic
+
+    Note:
+        Returns None gracefully if state is unreadable; never raises.
     """
     # Resolve backlog root
     if backlog_root is None:
@@ -1338,20 +2080,29 @@ def get_active_topic(
         except TopicError:
             return None
 
-    # Get active topic file path (Requirement 9.1)
-    active_topic_path = get_active_topic_path(agent, backlog_root)
+    # Try to load from shared state.json first (KABSD-TSK-0257)
+    try:
+        state = load_state_index(backlog_root)
+        if agent in state.agents:
+            agent_state = state.agents[agent]
+            if agent_state.active_topic_id:
+                # Load the topic state document to get the name
+                topic_doc = load_topic_state(agent_state.active_topic_id, backlog_root)
+                if topic_doc:
+                    return topic_doc.name
+    except Exception:
+        pass  # Fallback to legacy file
 
-    # Read active_topic.<agent>.txt if exists
+    # Fallback to legacy active_topic.<agent>.txt file
+    active_topic_path = get_active_topic_path(agent, backlog_root)
     if not active_topic_path.exists():
         return None
 
-    topic_name = _normalize_topic_name(active_topic_path.read_text(encoding="utf-8"))
-    
-    # Return None if file is empty
-    if not topic_name:
+    try:
+        topic_name = _normalize_topic_name(active_topic_path.read_text(encoding="utf-8"))
+        return topic_name if topic_name else None
+    except Exception:
         return None
-
-    return topic_name
 
 
 def export_topic_context(

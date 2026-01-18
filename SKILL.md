@@ -312,6 +312,12 @@ Use Topics when:
 6. **Cleanup**: `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic cleanup --ttl-days <N> [--dry-run]`
    - Removes raw materials from closed topics older than TTL
 
+**Topic snapshots (retention policy)**:
+- Snapshots are intended for **milestone checkpoints** (pre-merge/split/restore, risky bulk edits), not every small edit.
+- To prevent noise, keep only the **latest snapshot per topic** in this demo repo.
+- After creating a snapshot (or periodically), prune all but the newest snapshot:
+  - `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic snapshot cleanup <topic-name> --ttl-days 0 --keep-latest 1 --apply`
+
 **Topic structure**:
 ```
 _kano/backlog/topics/<topic>/
@@ -402,6 +408,7 @@ _kano/backlog/.cache/worksets/items/<ITEM_ID>/
   - `pinned_docs`: absolute paths for unambiguous reference
 - Keep `brief.md` **human-oriented** and **deterministic** (generated/overwritten by `topic distill`):
   - Readable item titles (e.g., "KABSD-TSK-0042: Implement tokenizer adapter")
+  - If available, include item path and keep UID in a hidden HTML comment for deterministic mapping
   - Context summary and key decisions
   - Materials index with human-friendly descriptions
 - Put human-facing decision support in `_kano/backlog/topics/<topic>/notes.md` (and/or pinned docs), e.g.:

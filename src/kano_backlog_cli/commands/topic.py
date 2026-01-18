@@ -1280,3 +1280,161 @@ def merge_topics_cmd(
                 typer.echo(f"  Updated references in {len(result.references_updated)} topics")
             if delete_sources:
                 typer.echo(f"  Deleted {len(result.merged_topics)} source topics")
+
+
+# =============================================================================
+# Shared State Commands (KABSD-TSK-0257)
+# =============================================================================
+
+
+@app.command("list-active")
+def list_active(
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """List all active topics across all agents (shared state)."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import list_active_topics
+
+    try:
+        result = list_active_topics()
+    except Exception as exc:
+        typer.echo(f"❌ Error listing active topics: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        if not result:
+            typer.echo("No active topics")
+        else:
+            typer.echo("Active topics:")
+            for agent_id, info in result.items():
+                typer.echo(f"  {agent_id}: {info['topic_name']}")
+                typer.echo(f"    ID: {info['topic_id']}")
+                typer.echo(f"    Updated: {info['updated_at']}")
+                if info.get('participants'):
+                    typer.echo(f"    Participants: {', '.join(info['participants'])}")
+
+
+@app.command("show-state")
+def show_state(
+    agent: Optional[str] = typer.Option(None, "--agent", help="Filter by agent ID"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Show shared topic state (state.json contents)."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import load_state_index
+
+    try:
+        state = load_state_index()
+    except Exception as exc:
+        typer.echo(f"❌ Error loading state: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        payload = state.to_dict()
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        typer.echo(f"Repo ID: {state.repo_id}")
+        typer.echo(f"State version: {state.version}")
+        typer.echo("Agents:")
+        for agent_id, agent_state in state.agents.items():
+            if agent and agent != agent_id:
+                continue
+            topic_str = agent_state.active_topic_id or "(none)"
+            typer.echo(f"  {agent_id}: {topic_str}")
+            typer.echo(f"    Updated: {agent_state.updated_at}")
+
+
+@app.command("migrate")
+def migrate(
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Migrate legacy active_topic.<agent>.txt files to shared state.json."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import migrate_legacy_active_topics
+
+    try:
+        result = migrate_legacy_active_topics()
+    except Exception as exc:
+        typer.echo(f"❌ Error migrating: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        if not result:
+            typer.echo("✓ No legacy files to migrate")
+        else:
+            typer.echo(f"✓ Migrated {len(result)} agent(s):")
+            for agent_id, topic_name in result.items():
+                typer.echo(f"  {agent_id} -> {topic_name}")
+
+
+@app.command("cleanup-legacy")
+def cleanup_legacy(
+    dry_run: bool = typer.Option(True, "--no-dry-run/--dry-run", help="Actually delete files (default: dry-run)"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Remove legacy active_topic.<agent>.txt files (after migration)."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import cleanup_legacy_active_topics
+
+    try:
+        result = cleanup_legacy_active_topics(dry_run=dry_run)
+    except Exception as exc:
+        typer.echo(f"❌ Error cleaning up: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        payload = {
+            "deleted": [str(p) for p in result],
+            "count": len(result),
+            "dry_run": dry_run,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        if not result:
+            typer.echo("✓ No legacy files to clean up")
+        else:
+            action = "Would delete" if dry_run else "Deleted"
+            typer.echo(f"✓ {action} {len(result)} file(s):")
+            for path in result:
+                typer.echo(f"  - {path}")
+            if dry_run:
+                typer.echo("  (use --no-dry-run to actually delete)")
+
+
+@app.command("migrate-filenames")
+def migrate_filenames(
+    dry_run: bool = typer.Option(True, "--no-dry-run/--dry-run", help="Actually rename files (default: dry-run)"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Migrate topic state filenames from {uuid}.json to {slug}_{uuid}.json format."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import migrate_topic_state_filenames
+
+    try:
+        result = migrate_topic_state_filenames(dry_run=dry_run)
+    except Exception as exc:
+        typer.echo(f"❌ Error migrating filenames: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        payload = {
+            "renamed": result,
+            "count": len(result),
+            "dry_run": dry_run,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        if not result:
+            typer.echo("✓ No files to migrate (all already in new format)")
+        else:
+            action = "Would rename" if dry_run else "Renamed"
+            typer.echo(f"✓ {action} {len(result)} file(s):")
+            for old_name, new_name in result.items():
+                typer.echo(f"  {old_name} → {new_name}")
+            if dry_run:
+                typer.echo("  (use --no-dry-run to actually rename)")
+
