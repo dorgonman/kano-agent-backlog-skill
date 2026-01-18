@@ -6,6 +6,26 @@ from pathlib import Path
 from typing import Optional
 
 
+def configure_stdio() -> None:
+    """Make CLI output robust across Windows console encodings.
+
+    Some Windows terminals use a non-UTF8 encoding (e.g., cp1252). If we print
+    Unicode glyphs (✓/❌/⚠️), Python can raise UnicodeEncodeError and abort the
+    command. To prevent first-run failures for agents, configure stdout/stderr
+    to replace unencodable characters instead of crashing.
+    """
+
+    if os.name != "nt":
+        return
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            # Keep the current encoding, but make encoding errors non-fatal.
+            stream.reconfigure(errors="replace")
+        except Exception:
+            continue
+
+
 def ensure_core_on_path() -> None:
     try:
         import kano_backlog_core  # noqa: F401

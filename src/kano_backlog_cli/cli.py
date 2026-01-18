@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 import typer
 
-from .util import ensure_core_on_path, resolve_product_root
+from .util import configure_stdio, ensure_core_on_path, resolve_product_root
 
 app = typer.Typer(help="kano: Backlog management CLI (MVP)")
 
 
 @app.callback()
 def _init():
+    configure_stdio()
     ensure_core_on_path()
 
 

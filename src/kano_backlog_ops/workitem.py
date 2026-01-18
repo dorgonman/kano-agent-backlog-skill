@@ -253,7 +253,7 @@ def _resolve_item_path(
 
 
 def _state_rank(state: ItemState) -> int:
-    if state in (ItemState.NEW, ItemState.PROPOSED, ItemState.READY):
+    if state in (ItemState.NEW, ItemState.PROPOSED, ItemState.PLANNED, ItemState.READY):
         return 0
     if state in (ItemState.IN_PROGRESS, ItemState.REVIEW, ItemState.BLOCKED):
         return 1

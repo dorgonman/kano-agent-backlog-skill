@@ -247,7 +247,11 @@ def set_ready(
 @app.command(name="update-state")
 def update_state_command(
     item_ref: str = typer.Argument(..., help="Item ID, UID, or path"),
-    state: str = typer.Option(..., "--state", help="Target state (New|Proposed|Ready|InProgress|Review|Done|Blocked|Dropped)"),
+    state: str = typer.Option(
+        ...,
+        "--state",
+        help="Target state (New|Proposed|Planned|Ready|InProgress|Review|Done|Blocked|Dropped)",
+    ),
     agent: str = typer.Option(..., "--agent", help="Agent name (for audit trail)"),
     message: str = typer.Option("", "--message", help="Worklog message"),
     model: str | None = typer.Option(None, "--model", help="Model used by agent (e.g., claude-sonnet-4.5, gpt-5.1)"),
@@ -270,6 +274,7 @@ def update_state_command(
     state_map = {
         "new": ItemState.NEW,
         "proposed": ItemState.PROPOSED,
+        "planned": ItemState.PLANNED,
         "ready": ItemState.READY,
         "inprogress": ItemState.IN_PROGRESS,
         "review": ItemState.REVIEW,
@@ -280,7 +285,7 @@ def update_state_command(
     item_state = state_map.get(normalized)
     if item_state is None:
         typer.echo(
-            "❌ Invalid state. Use: New, Proposed, Ready, InProgress, Review, Done, Blocked, Dropped",
+            "❌ Invalid state. Use: New, Proposed, Planned, Ready, InProgress, Review, Done, Blocked, Dropped",
             err=True,
         )
         raise typer.Exit(1)
