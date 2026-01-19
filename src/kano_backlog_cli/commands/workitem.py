@@ -86,6 +86,50 @@ def validate(
                 typer.echo(f"  - {field}")
 
 
+@app.command("add-decision")
+def add_decision(
+    item_ref: str = typer.Argument(..., help="Item ID/UID/path"),
+    decision: str = typer.Option(..., "--decision", help="Decision text (English)"),
+    source: str | None = typer.Option(None, "--source", help="Source path or reference"),
+    agent: str = typer.Option(..., "--agent", help="Agent identity"),
+    product: str | None = typer.Option(None, "--product", help="Product name"),
+    backlog_root_override: Path | None = typer.Option(
+        None,
+        "--backlog-root-override",
+        help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
+    ),
+    output_format: str = typer.Option("plain", "--format", help="plain|json"),
+):
+    """Append a decision write-back entry to a work item."""
+    ensure_core_on_path()
+    from kano_backlog_ops.workitem import add_decision_writeback
+
+    try:
+        result = add_decision_writeback(
+            item_ref,
+            decision,
+            source=source,
+            agent=agent,
+            product=product,
+            backlog_root=backlog_root_override,
+        )
+    except Exception as exc:
+        typer.echo(f"❌ {exc}", err=True)
+        raise typer.Exit(1)
+
+    if output_format == "json":
+        payload = {
+            "item_id": result.item_id,
+            "path": str(result.path),
+            "added": result.added,
+            "updated": result.updated,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        typer.echo(f"✓ Decision write-back added to {result.item_id}")
+        typer.echo(f"  Path: {result.path}")
+
+
 def _run_create_command(
     *,
     item_type: str,

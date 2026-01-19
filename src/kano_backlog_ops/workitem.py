@@ -59,6 +59,16 @@ class ValidationResult:
 
 
 @dataclass
+class DecisionWritebackResult:
+    """Result of writing back a decision to a work item."""
+
+    item_id: str
+    path: Path
+    added: bool
+    updated: bool
+
+
+@dataclass
 class RemapIdResult:
     """Result of remapping an item ID."""
     old_id: str
@@ -250,6 +260,89 @@ def _resolve_item_path(
     if len(candidates) > 1:
         raise ValueError(f"Ambiguous item reference '{item_ref}': {len(candidates)} matches")
     return target_root, candidates[0]
+
+
+def _insert_decision_section(lines: List[str], decision_line: str) -> tuple[List[str], bool]:
+    """Insert or append a decision line under a ## Decisions section."""
+    # Find Worklog section to insert before it if needed
+    worklog_idx = worklog.find_worklog_section(lines)
+    insert_limit = worklog_idx if worklog_idx != -1 else len(lines)
+
+    # Find existing Decisions section
+    header_idx = -1
+    for idx, line in enumerate(lines[:insert_limit]):
+        if line.strip().lower() == "## decisions":
+            header_idx = idx
+            break
+
+    if header_idx == -1:
+        # Insert new Decisions section before Worklog (or end)
+        block = ["", "## Decisions", "", f"- {decision_line}"]
+        lines[insert_limit:insert_limit] = block
+        return lines, True
+
+    # Append under existing Decisions section
+    next_heading = insert_limit
+    for idx in range(header_idx + 1, insert_limit):
+        if lines[idx].strip().startswith("#"):
+            next_heading = idx
+            break
+
+    # Avoid duplicate entry
+    for idx in range(header_idx + 1, next_heading):
+        if lines[idx].strip() == f"- {decision_line}":
+            return lines, False
+
+    lines.insert(next_heading, f"- {decision_line}")
+    return lines, True
+
+
+def add_decision_writeback(
+    item_ref: str,
+    decision: str,
+    *,
+    source: Optional[str] = None,
+    agent: str,
+    model: Optional[str] = None,
+    product: Optional[str] = None,
+    backlog_root: Optional[Path] = None,
+) -> DecisionWritebackResult:
+    """Append a decision entry to a work item and log the write-back."""
+    if not decision or not decision.strip():
+        raise ValueError("Decision text cannot be empty")
+
+    target_root, item_path = _resolve_item_path(item_ref, product=product, backlog_root=backlog_root)
+    lines = frontmatter.load_lines(item_path)
+    fm = frontmatter.parse_frontmatter(lines)
+    item_id = fm.get("id", item_ref)
+
+    decision_text = decision.strip()
+    if source:
+        decision_text = f"{decision_text} (source: {source})"
+
+    lines, added = _insert_decision_section(lines, decision_text)
+
+    # Update updated date
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        lines = frontmatter.update_frontmatter_field(lines, "updated", today)
+    except Exception:
+        try:
+            lines = frontmatter.add_frontmatter_field_before_closing(lines, "updated", today)
+        except Exception:
+            pass
+
+    # Append worklog entry
+    message = f"Decision write-back added: {decision_text}"
+    lines = worklog.append_worklog_entry(lines, message, agent, model=model)
+    frontmatter.write_lines(item_path, lines)
+
+    return DecisionWritebackResult(
+        item_id=item_id,
+        path=item_path,
+        added=added,
+        updated=True,
+    )
 
 
 def _state_rank(state: ItemState) -> int:

@@ -19,9 +19,11 @@ from .init import InitBacklogResult, init_backlog, check_initialized
 from .workitem import (
     create_item,
     update_state,
+    add_decision_writeback,
     validate_ready,
     list_items,
     get_item,
+    DecisionWritebackResult,
 )
 from .adr import create_adr, list_adrs
 from .view import refresh_dashboards, generate_view
@@ -79,7 +81,7 @@ from .topic import (
     get_topic_state_by_name,
     update_agent_state,
     update_worksets_after_merge,
-    # Directory utilities
+    generate_decision_audit_report,
     get_topics_root,
     get_topic_path,
     get_active_topic_path,
@@ -95,6 +97,7 @@ from .topic import (
     TopicPinResult,
     TopicSwitchResult,
     TopicContextBundle,
+    TopicDecisionAuditResult,
     # Shared state data models (KABSD-TSK-0257)
     StateIndex,
     AgentTopicState,
@@ -200,6 +203,8 @@ __all__ = [
     "list_active_topics",
     "get_topic_state_by_name",
     "update_agent_state",
+    "update_worksets_after_merge",
+    "generate_decision_audit_report",
     # topic - directory utilities
     "get_topics_root",
     "get_topic_path",
@@ -216,6 +221,7 @@ __all__ = [
     "TopicPinResult",
     "TopicSwitchResult",
     "TopicContextBundle",
+    "TopicDecisionAuditResult",
     # topic - shared state data models (KABSD-TSK-0257)
     "StateIndex",
     "AgentTopicState",

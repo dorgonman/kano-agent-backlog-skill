@@ -335,6 +335,19 @@ class TopicMergePlan:
     references_to_update: List[str]  # Topics that will need reference updates
 
 
+@dataclass
+class TopicDecisionAuditResult:
+    """Result of auditing decision write-back for a topic."""
+
+    topic: str
+    report_path: Path
+    decisions_found: int
+    items_total: int
+    items_with_writeback: List[str]
+    items_missing_writeback: List[str]
+    sources_scanned: List[str]
+
+
 # =============================================================================
 # Shared Topic State (KABSD-TSK-0257)
 # =============================================================================
@@ -1662,6 +1675,180 @@ def distill_topic(
     manifest.updated_at = generated_at
     manifest.save(manifest_path)
     return brief_path
+
+
+def _extract_decisions_from_markdown(text: str) -> List[str]:
+    """Extract decision bullet lines from markdown under Decision headings."""
+    decisions: List[str] = []
+    in_section = False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        heading_match = re.match(r"^(#{2,6})\s+(.*)$", line)
+        if heading_match:
+            title = heading_match.group(2).strip().lower()
+            if "decision" in title:
+                in_section = True
+                continue
+            if in_section and heading_match.group(1).count("#") >= 3:
+                decisions.append(heading_match.group(2).strip())
+                continue
+            in_section = False
+            continue
+        if not in_section:
+            continue
+        bullet_match = re.match(r"^[-*]\s+(.+)$", line)
+        if bullet_match:
+            decisions.append(bullet_match.group(1).strip())
+            continue
+        decision_line = re.match(r"^\*\*Decision\*\*:\s*(.+)$", line)
+        if decision_line:
+            decisions.append(decision_line.group(1).strip())
+    return decisions
+
+
+def _extract_frontmatter_decisions(text: str) -> List[str]:
+    """Extract decisions list from YAML frontmatter (minimal parser)."""
+    lines = text.splitlines()
+    if not lines or not lines[0].strip() == "---":
+        return []
+    decisions: List[str] = []
+    in_frontmatter = True
+    in_decisions = False
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if re.match(r"^decisions:\s*$", line.strip()):
+            in_decisions = True
+            continue
+        if in_decisions:
+            if re.match(r"^\w+?:", line):
+                in_decisions = False
+                continue
+            item_match = re.match(r"^\s*-\s*(.+)$", line)
+            if item_match:
+                decisions.append(item_match.group(1).strip())
+    return [d for d in decisions if d]
+
+
+def _has_decisions_in_body(text: str) -> bool:
+    """Check if workitem body contains a Decisions section with content."""
+    lines = text.splitlines()
+    in_section = False
+    for raw in lines:
+        line = raw.rstrip()
+        heading_match = re.match(r"^(#{2,6})\s+(.*)$", line)
+        if heading_match:
+            title = heading_match.group(2).strip().lower()
+            in_section = title.startswith("decisions")
+            continue
+        if not in_section:
+            continue
+        if line.strip() == "":
+            continue
+        if line.strip().startswith("#"):
+            in_section = False
+            continue
+        return True
+    return False
+
+
+def generate_decision_audit_report(
+    topic_name: str,
+    *,
+    backlog_root: Optional[Path] = None,
+) -> TopicDecisionAuditResult:
+    """Generate a deterministic decision write-back audit report for a topic."""
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    canonical_name = _normalize_topic_name(topic_name)
+    topic_path = get_topic_path(canonical_name, backlog_root)
+    manifest_path = topic_path / "manifest.json"
+    if not manifest_path.exists():
+        raise TopicNotFoundError(canonical_name)
+
+    manifest = TopicManifest.load(manifest_path)
+    repo_root = backlog_root.parent.parent
+
+    # Collect decisions from synthesis markdowns
+    synthesis_dir = topic_path / "synthesis"
+    decisions: List[Tuple[str, str]] = []
+    sources_scanned: List[str] = []
+    if synthesis_dir.exists():
+        for md_path in sorted(synthesis_dir.glob("*.md")):
+            sources_scanned.append(str(md_path.relative_to(repo_root)))
+            text = md_path.read_text(encoding="utf-8")
+            for d in _extract_decisions_from_markdown(text):
+                decisions.append((d, str(md_path.relative_to(repo_root))))
+
+    # Resolve workitems from seed_items
+    from kano_backlog_ops.workset import _resolve_item_ref
+
+    items_with_writeback: List[str] = []
+    items_missing_writeback: List[str] = []
+    item_paths: List[str] = []
+    for uid in sorted(manifest.seed_items):
+        try:
+            item_path, _metadata = _resolve_item_ref(uid, backlog_root)
+        except Exception:
+            continue
+        try:
+            rel_path = str(item_path.relative_to(repo_root))
+        except Exception:
+            rel_path = str(item_path)
+        item_paths.append(rel_path)
+        content = item_path.read_text(encoding="utf-8")
+        frontmatter_decisions = _extract_frontmatter_decisions(content)
+        has_body_decisions = _has_decisions_in_body(content)
+        if frontmatter_decisions or has_body_decisions:
+            items_with_writeback.append(rel_path)
+        else:
+            items_missing_writeback.append(rel_path)
+
+    report_lines: List[str] = []
+    report_lines.append(f"# Decision Write-back Audit: {canonical_name}\n")
+    report_lines.append(f"Generated: {_now_timestamp()}\n")
+    report_lines.append("## Summary\n")
+    report_lines.append(f"- Decisions found in synthesis: {len(decisions)}")
+    report_lines.append(f"- Workitems checked: {len(item_paths)}")
+    report_lines.append(f"- Workitems with decisions: {len(items_with_writeback)}")
+    report_lines.append(f"- Workitems missing decisions: {len(items_missing_writeback)}\n")
+
+    report_lines.append("## Decisions (from synthesis)\n")
+    if decisions:
+        for idx, (text, src) in enumerate(decisions, start=1):
+            report_lines.append(f"{idx}. {text} (source: `{src}`)")
+    else:
+        report_lines.append("- (none)\n")
+
+    report_lines.append("\n## Workitems Missing Decision Write-back\n")
+    if items_missing_writeback:
+        for path in items_missing_writeback:
+            report_lines.append(f"- `{path}`")
+    else:
+        report_lines.append("- (none)\n")
+
+    report_lines.append("\n## Workitems With Decision Write-back\n")
+    if items_with_writeback:
+        for path in items_with_writeback:
+            report_lines.append(f"- `{path}`")
+    else:
+        report_lines.append("- (none)\n")
+
+    publish_dir = topic_path / "publish"
+    publish_dir.mkdir(parents=True, exist_ok=True)
+    report_path = publish_dir / "decision-audit.md"
+    report_path.write_text("\n".join(report_lines).strip() + "\n", encoding="utf-8")
+
+    return TopicDecisionAuditResult(
+        topic=canonical_name,
+        report_path=report_path,
+        decisions_found=len(decisions),
+        items_total=len(item_paths),
+        items_with_writeback=items_with_writeback,
+        items_missing_writeback=items_missing_writeback,
+        sources_scanned=sources_scanned,
+    )
 
 
 def reopen_topic(

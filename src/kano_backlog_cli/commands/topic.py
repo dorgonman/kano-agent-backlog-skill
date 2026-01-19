@@ -349,6 +349,49 @@ def distill(
         typer.echo(f"✓ Distilled brief: {brief_path}")
 
 
+@app.command("decision-audit")
+def decision_audit(
+    topic_name: str = typer.Argument(..., help="Topic name"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Generate a decision write-back audit report for a topic."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import generate_decision_audit_report, TopicNotFoundError, TopicError
+
+    try:
+        result = generate_decision_audit_report(topic_name)
+    except TopicNotFoundError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except TopicError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if exc.suggestion:
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except Exception as exc:
+        typer.echo(f"❌ Unexpected error: {exc}", err=True)
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        payload = {
+            "topic": result.topic,
+            "report_path": str(result.report_path),
+            "decisions_found": result.decisions_found,
+            "items_total": result.items_total,
+            "items_with_writeback": result.items_with_writeback,
+            "items_missing_writeback": result.items_missing_writeback,
+            "sources_scanned": result.sources_scanned,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        typer.echo(f"✓ Decision audit report: {result.report_path}")
+        typer.echo(f"  Decisions found: {result.decisions_found}")
+        typer.echo(f"  Workitems checked: {result.items_total}")
+        typer.echo(f"  Missing write-back: {len(result.items_missing_writeback)}")
+
+
 @app.command("close")
 def close(
     topic_name: str = typer.Argument(..., help="Topic name"),

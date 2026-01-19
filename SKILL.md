@@ -304,7 +304,8 @@ Use Topics when:
    - Add code snippets: `topic add-snippet <topic-name> --file <path> --start <line> --end <line> --agent <id>`
    - Pin docs: `topic pin <topic-name> --doc <path>`
 3. **Distill**: `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic distill <topic-name>`
-   - Generates/updates deterministic `brief.md` from collected materials
+  - Generates/overwrites deterministic `brief.generated.md` from collected materials
+  - `brief.md` is a stable, human-maintained brief (do not overwrite it automatically)
 4. **Switch context**: `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic switch <topic-name> --agent <id>`
    - Sets active topic (affects config overlays and workset behavior)
 5. **Close**: `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic close <topic-name> --agent <id>`
@@ -322,7 +323,8 @@ Use Topics when:
 ```
 _kano/backlog/topics/<topic>/
   manifest.json          # refs to items/docs/snippets, status, timestamps
-  brief.md               # deterministic distilled summary (can be versioned)
+  brief.md               # stable, human-maintained brief (do not overwrite automatically)
+  brief.generated.md     # deterministic distilled brief (generated/overwritten by `topic distill`)
   notes.md               # freeform notes (backward compat)
   materials/             # raw collection (gitignored by default)
     clips/               # code snippet refs + cached text
@@ -407,10 +409,12 @@ _kano/backlog/.cache/worksets/items/<ITEM_ID>/
   - `snippet_refs`: file+line+hash for deterministic loading
   - `pinned_docs`: absolute paths for unambiguous reference
 - Keep `brief.md` **human-oriented** and **deterministic** (generated/overwritten by `topic distill`):
+- Keep `brief.md` **human-oriented** and **stable** (do not overwrite automatically):
   - Readable item titles (e.g., "KABSD-TSK-0042: Implement tokenizer adapter")
   - If available, include item path and keep UID in a hidden HTML comment for deterministic mapping
   - Context summary and key decisions
   - Materials index with human-friendly descriptions
+- Use `brief.generated.md` as the deterministic, tool-owned output of `topic distill`.
 - Put human-facing decision support in `_kano/backlog/topics/<topic>/notes.md` (and/or pinned docs), e.g.:
   - Decision to make
   - Options + trade-offs
