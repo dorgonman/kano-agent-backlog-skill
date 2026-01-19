@@ -9,10 +9,10 @@ import logging
 from kano_backlog_core.config import ConfigLoader
 from kano_backlog_core.canonical import CanonicalStore
 from kano_backlog_core.chunking import chunk_text
-from kano_backlog_core.tokenizer import resolve_tokenizer
+from kano_backlog_core.tokenizer import resolve_model_max_tokens, resolve_tokenizer
 from kano_backlog_core.token_budget import enforce_token_budget
 from kano_backlog_core.embedding import resolve_embedder
-from kano_backlog_core.vector import get_backend, VectorChunk
+from kano_backlog_core.vector import VectorChunk, get_backend
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +56,18 @@ def build_vector_index(
     if not vec_path.is_absolute():
         vec_path = ctx.product_root / vec_path
         
+    embedding_space_id = (
+        f"emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
+        f"|tok:{pc.tokenizer.adapter}:{pc.tokenizer.model}:max{pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)}"
+        f"|chunk:{pc.chunking.version}"
+        f"|metric:{pc.vector.metric}"
+    )
+
     vec_cfg = {
         "backend": pc.vector.backend,
         "path": str(vec_path),
+        "collection": pc.vector.collection,
+        "embedding_space_id": embedding_space_id,
     }
     backend = get_backend(vec_cfg)
     backend.prepare(schema={}, dims=pc.embedding.dimension, metric=pc.vector.metric)
@@ -97,25 +106,36 @@ def build_vector_index(
             raw_chunks = chunk_text(
                 source_id=item.id,
                 text=text_to_chunk,
-                options=pc.chunking
+                options=pc.chunking,
             )
-            
+
             for rc in raw_chunks:
-                max_tokens = pc.tokenizer.max_tokens or 8192
+                max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(
+                    pc.tokenizer.model
+                )
                 budget_res = enforce_token_budget(rc.text, tokenizer, max_tokens=max_tokens)
-                
+
                 vc = VectorChunk(
-                    chunk_id=rc.id,
-                    text=budget_res.text,
+                    chunk_id=rc.chunk_id,
+                    text=budget_res.content,
                     metadata={
                         "source_id": item.id,
-                        "offset": rc.range.start,
-                    }
+                        "start_char": rc.start_char,
+                        "end_char": rc.end_char,
+                        "trimmed": budget_res.trimmed,
+                        "token_count": budget_res.token_count.count,
+                        "token_count_method": budget_res.token_count.method,
+                        "tokenizer_id": budget_res.token_count.tokenizer_id,
+                        "is_exact": budget_res.token_count.is_exact,
+                        "target_budget": budget_res.target_budget,
+                        "safety_margin": budget_res.safety_margin,
+                        "max_tokens": max_tokens,
+                    },
                 )
-                
+
                 current_batch.append(vc)
                 chunks_generated += 1
-                
+
                 if len(current_batch) >= BATCH_SIZE:
                     flush_batch()
                     

@@ -3,12 +3,14 @@
 from typing import List, Optional
 import time
 
-from ..adapter import EmbeddingAdapter
-from ..types import EmbeddingResult, EmbeddingTelemetry
+from ..tokenizer import TokenCount, resolve_model_max_tokens
+from .adapter import EmbeddingAdapter
+from .types import EmbeddingResult, EmbeddingTelemetry
+
 
 class OpenAIEmbeddingAdapter(EmbeddingAdapter):
     """Embedding adapter for OpenAI models."""
-    
+
     def __init__(self, model_name: str = "text-embedding-3-small", api_key: Optional[str] = None):
         super().__init__(model_name)
         self._api_key = api_key
@@ -46,23 +48,31 @@ class OpenAIEmbeddingAdapter(EmbeddingAdapter):
         duration_ms = (time.perf_counter() - t0) * 1000
         
         results = []
+        max_tokens = resolve_model_max_tokens(self.model_name)
+        per_item_ms = duration_ms / max(1, len(texts))
+
         for i, embedding_data in enumerate(response.data):
-            # OpenAI doesn't provide token counts in embedding response
-            # We estimate based on text length
-            token_count = len(texts[i]) // 4
-            
+            # OpenAI embeddings API does not return token usage; we report a heuristic.
+            token_count_est = len(texts[i]) // 4
+
             telemetry = EmbeddingTelemetry(
                 provider_id="openai",
                 model_name=self.model_name,
-                token_count=token_count,
                 dimension=len(embedding_data.embedding),
-                duration_ms=duration_ms / len(texts),
-                trimmed=False
+                token_count=TokenCount(
+                    count=token_count_est,
+                    method="heuristic",
+                    tokenizer_id=f"heuristic:{self.model_name}",
+                    is_exact=False,
+                ),
+                max_tokens=max_tokens,
+                target_budget=max_tokens,
+                safety_margin=0,
+                duration_ms=per_item_ms,
+                trimmed=False,
+                warnings=None,
             )
-            
-            results.append(EmbeddingResult(
-                vector=embedding_data.embedding,
-                telemetry=telemetry
-            ))
-        
+
+            results.append(EmbeddingResult(vector=embedding_data.embedding, telemetry=telemetry))
+
         return results

@@ -78,6 +78,7 @@ from .topic import (
     list_active_topics,
     get_topic_state_by_name,
     update_agent_state,
+    update_worksets_after_merge,
     # Directory utilities
     get_topics_root,
     get_topic_path,

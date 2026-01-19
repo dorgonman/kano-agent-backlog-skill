@@ -7,7 +7,8 @@ import time
 
 from kano_backlog_core.config import ConfigLoader
 from kano_backlog_core.embedding import resolve_embedder
-from kano_backlog_core.vector import get_backend, VectorQueryResult
+from kano_backlog_core.tokenizer import resolve_model_max_tokens
+from kano_backlog_core.vector import VectorQueryResult, get_backend
 
 @dataclass
 class SearchResult:
@@ -62,10 +63,18 @@ def search_similar(
     if not vec_path.is_absolute():
         vec_path = ctx.product_root / vec_path
         
+    embedding_space_id = (
+        f"emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
+        f"|tok:{pc.tokenizer.adapter}:{pc.tokenizer.model}:max{pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)}"
+        f"|chunk:{pc.chunking.version}"
+        f"|metric:{pc.vector.metric}"
+    )
+
     vec_cfg = {
         "backend": pc.vector.backend,
         "path": str(vec_path),
         "collection": pc.vector.collection,
+        "embedding_space_id": embedding_space_id,
     }
     backend = get_backend(vec_cfg)
     backend.load()

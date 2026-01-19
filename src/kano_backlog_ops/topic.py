@@ -264,7 +264,7 @@ class TopicSnapshot:
     created_by: str  # Agent who created the snapshot
     description: str  # User-provided description
     manifest: TopicManifest  # Snapshot of manifest at time of creation
-    brief_content: Optional[str] = None  # Snapshot of brief.md content
+    brief_content: Optional[str] = None  # Snapshot of brief.generated.md content
     notes_content: Optional[str] = None  # Snapshot of notes.md content
     materials_index: Dict[str, str] = field(default_factory=dict)  # File path -> content hash
 
@@ -521,6 +521,29 @@ def is_valid_topic_name(topic_name: str) -> bool:
 # Shared State Store Functions (KABSD-TSK-0257)
 # =============================================================================
 
+# Maximum slug length for topic state filenames (to avoid Windows MAX_PATH issues)
+# Format: {slug}_{uuid}.json where slug is truncated to this length
+# Total filename: 48 (slug) + 1 (_) + 36 (uuid) + 5 (.json) = 90 chars
+MAX_TOPIC_SLUG_LENGTH = 48
+
+
+def _truncate_slug(slug: str, max_length: int = MAX_TOPIC_SLUG_LENGTH) -> str:
+    """
+    Truncate slug to maximum length for safe filesystem operations.
+    
+    Prevents hitting Windows MAX_PATH (260 chars) or other filesystem limits.
+    
+    Args:
+        slug: Topic name slug
+        max_length: Maximum length (default: 48)
+    
+    Returns:
+        Truncated slug (may be shorter than max_length if original was shorter)
+    """
+    if len(slug) <= max_length:
+        return slug
+    return slug[:max_length]
+
 
 def _compute_repo_id(backlog_root: Path) -> str:
     """
@@ -666,7 +689,7 @@ def save_topic_state(doc: TopicStateDocument, backlog_root: Optional[Path] = Non
     Save a topic state document to topics/{slug}_{topic_id}.json (atomic write).
 
     Uses human-readable slug prefix for better discoverability.
-    Format: {topic-name}_{uuid}.json
+    Format: {topic-name}_{uuid}.json (slug truncated to MAX_TOPIC_SLUG_LENGTH)
 
     Args:
         doc: TopicStateDocument to save
@@ -676,8 +699,9 @@ def save_topic_state(doc: TopicStateDocument, backlog_root: Optional[Path] = Non
         backlog_root = _find_backlog_root()
 
     topics_dir = get_state_topics_dir(backlog_root)
-    # Use slug_uuid format for human readability
-    topic_path = topics_dir / f"{doc.name}_{doc.topic_id}.json"
+    # Truncate slug to prevent Windows MAX_PATH issues
+    safe_slug = _truncate_slug(doc.name)
+    topic_path = topics_dir / f"{safe_slug}_{doc.topic_id}.json"
     doc.save(topic_path)
 
 
@@ -837,6 +861,8 @@ def migrate_topic_state_filenames(backlog_root: Optional[Path] = None, dry_run: 
     """
     Migrate topic state files from {uuid}.json to {slug}_{uuid}.json format.
 
+    Slug is truncated to MAX_TOPIC_SLUG_LENGTH to avoid filesystem limits.
+
     Args:
         backlog_root: Root path for backlog
         dry_run: If True, return what would be renamed but don't actually rename
@@ -869,8 +895,9 @@ def migrate_topic_state_filenames(backlog_root: Optional[Path] = None, dry_run: 
             # Load document to get the topic name
             doc = TopicStateDocument.load(topic_file)
             
-            # Generate new filename: {slug}_{uuid}.json
-            new_filename = f"{doc.name}_{doc.topic_id}.json"
+            # Generate new filename: {slug}_{uuid}.json (slug truncated for safety)
+            safe_slug = _truncate_slug(doc.name)
+            new_filename = f"{safe_slug}_{doc.topic_id}.json"
             new_path = topics_dir / new_filename
 
             # Skip if target already exists
@@ -1069,7 +1096,7 @@ def get_topics_root(backlog_root: Optional[Path] = None) -> Path:
 
     Note:
         Changed from .cache/worksets/topics/ to topics/ per KABSD-FTR-0037
-        so that brief.md can optionally be version-controlled.
+        so that brief.generated.md can optionally be version-controlled.
     """
     if backlog_root is None:
         backlog_root = Path.cwd() / "_kano" / "backlog"
@@ -1148,7 +1175,7 @@ def create_topic(
         agent: Agent identity
         backlog_root: Root path for backlog
         create_notes: Whether to create notes.md (default: True)
-        create_brief: Whether to create brief.md template (default: True)
+        create_brief: Whether to create brief.generated.md template (default: True)
 
     Returns:
         TopicCreateResult with creation details
@@ -1160,7 +1187,7 @@ def create_topic(
     Directory structure created:
         topics/<topic>/
             manifest.json
-            brief.md           (if create_brief=True)
+            brief.generated.md (if create_brief=True)
             spec/              (if create_spec=True)
                 requirements.md
                 design.md
@@ -1230,10 +1257,10 @@ def create_topic(
     manifest_path = topic_path / "manifest.json"
     manifest.save(manifest_path)
 
-    # Optionally create brief.md (KABSD-FTR-0037)
+    # Optionally create brief.generated.md (KABSD-FTR-0037)
     if create_brief:
         brief_content = _generate_topic_brief_template(canonical_name, timestamp)
-        brief_path = topic_path / "brief.md"
+        brief_path = topic_path / "brief.generated.md"
         brief_path.write_text(brief_content, encoding="utf-8")
 
     # Optionally create notes.md (Requirement 6.3, backward compat)
@@ -1288,7 +1315,7 @@ def _generate_topic_notes_template(topic_name: str) -> str:
 
 def _generate_topic_brief_template(topic_name: str, timestamp: str) -> str:
     """
-    Generate brief.md template for a topic (distilled briefing).
+    Generate brief.generated.md template for a topic (distilled briefing).
 
     The brief is the synthesized output that helps agents quickly understand
     task context without re-collecting materials.
@@ -1495,7 +1522,7 @@ def distill_topic(
     *,
     backlog_root: Optional[Path] = None,
 ) -> Path:
-    """Generate/overwrite a deterministic brief.md from the manifest + materials index."""
+    """Generate/overwrite a deterministic brief.generated.md from the manifest + materials index."""
     if backlog_root is None:
         backlog_root = _find_backlog_root()
 
@@ -1512,7 +1539,7 @@ def distill_topic(
         return str(path).replace("\\", "/")
 
     def _try_render_seed_item(uid: str) -> Optional[Tuple[str, str]]:
-        """Render a seed item as a human-readable line for brief.md.
+        """Render a seed item as a human-readable line for brief.generated.md.
 
         Returns:
             Tuple of (sort_key, line) or None if item cannot be resolved.
@@ -1629,7 +1656,7 @@ def distill_topic(
         f"{snippets}\n"
     )
 
-    brief_path = topic_path / "brief.md"
+    brief_path = topic_path / "brief.generated.md"
     brief_path.write_text(brief, encoding="utf-8")
 
     manifest.updated_at = generated_at
@@ -2532,7 +2559,7 @@ def create_topic_snapshot(
 
     # Collect content
     brief_content = None
-    brief_path = topic_path / "brief.md"
+    brief_path = topic_path / "brief.generated.md"
     if brief_path.exists():
         brief_content = brief_path.read_text(encoding="utf-8")
 
@@ -2671,7 +2698,7 @@ def restore_topic_snapshot(
         agent: Agent performing the restore
         backlog_root: Root path for backlog
         restore_manifest: Whether to restore manifest.json
-        restore_brief: Whether to restore brief.md
+        restore_brief: Whether to restore brief.generated.md
         restore_notes: Whether to restore notes.md
         backup_current: Whether to create a backup before restoring
 
@@ -2749,9 +2776,9 @@ def restore_topic_snapshot(
             restored_manifest.save(manifest_path)
             restored_components.append("manifest")
 
-        # Restore brief.md
+        # Restore brief.generated.md
         if restore_brief and snapshot_data.get("brief_content"):
-            brief_path = topic_path / "brief.md"
+            brief_path = topic_path / "brief.generated.md"
             brief_path.write_text(snapshot_data["brief_content"], encoding="utf-8")
             restored_components.append("brief")
 
@@ -3205,3 +3232,81 @@ def merge_topics(
         references_updated=references_updated,
         merged_at=now,
     )
+
+
+def update_worksets_after_merge(
+    target_topic: str,
+    source_topics: List[str],
+    *,
+    backlog_root: Optional[Path] = None,
+) -> None:
+    """Update shared worksets state after merging topics.
+
+    - Union participants into target topic state document
+    - Mark source topic state documents as closed
+    - Repoint any agent active_topic_id from source -> target
+    - Persist state.json and topic state documents
+    """
+    if backlog_root is None:
+        backlog_root = _find_backlog_root()
+
+    canonical_target = _normalize_topic_name(target_topic)
+    canonical_sources = [_normalize_topic_name(s) for s in source_topics]
+
+    # Load state index
+    state = load_state_index(backlog_root)
+
+    # Map topic name -> topic_id via topics state docs
+    topics_dir = get_state_topics_dir(backlog_root)
+    name_to_doc: Dict[str, TopicStateDocument] = {}
+    if topics_dir.exists():
+        for jf in topics_dir.glob("*.json"):
+            try:
+                doc = TopicStateDocument.load(jf)
+                name_to_doc[doc.name] = doc
+            except Exception:
+                pass
+
+    target_doc = name_to_doc.get(canonical_target)
+    if not target_doc:
+        # Create target doc if missing
+        target_doc = TopicStateDocument(
+            topic_id=generate_topic_id(),
+            name=canonical_target,
+            participants=[],
+            status="active",
+            created_at=_now_timestamp(),
+            updated_at=_now_timestamp(),
+            created_by="",
+        )
+        save_topic_state(target_doc, backlog_root)
+
+    # Union participants and mark sources closed
+    target_participants = set(target_doc.participants)
+    source_ids: List[str] = []
+    now = _now_timestamp()
+    for src in canonical_sources:
+        src_doc = name_to_doc.get(src)
+        if src_doc:
+            source_ids.append(src_doc.topic_id)
+            for p in src_doc.participants:
+                target_participants.add(p)
+            src_doc.status = "closed"
+            src_doc.updated_at = now
+            save_topic_state(src_doc, backlog_root)
+    target_doc.participants = sorted(target_participants)
+    target_doc.updated_at = now
+    save_topic_state(target_doc, backlog_root)
+
+    # Repoint agents from source topic IDs to target topic ID
+    for agent_id, agent_state in list(state.agents.items()):
+        if agent_state.active_topic_id and agent_state.active_topic_id in source_ids:
+            agent_state.active_topic_id = target_doc.topic_id
+            agent_state.updated_at = now
+            state.agents[agent_id] = agent_state
+            # Also update legacy txt
+            atxt = get_active_topic_path(agent_id, backlog_root)
+            atxt.parent.mkdir(parents=True, exist_ok=True)
+            atxt.write_text(canonical_target, encoding="utf-8")
+
+    save_state_index(state, backlog_root)

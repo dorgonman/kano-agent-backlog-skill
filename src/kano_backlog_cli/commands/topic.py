@@ -323,7 +323,7 @@ def distill(
     topic_name: str = typer.Argument(..., help="Topic name"),
     output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
 ):
-    """Generate/overwrite deterministic brief.md from collected materials."""
+    """Generate/overwrite deterministic brief.generated.md from collected materials."""
     ensure_core_on_path()
     from kano_backlog_ops.topic import distill_topic, TopicNotFoundError, TopicError
 
@@ -426,6 +426,81 @@ def cleanup(
         typer.echo(f"{mode}: scanned={result.topics_scanned} cleaned={result.topics_cleaned}")
         for p in result.deleted_paths:
             typer.echo(f"  - {p}")
+
+
+@app.command("merge")
+def merge(
+    target: str = typer.Argument(..., help="Target topic name"),
+    sources: List[str] = typer.Argument(..., help="Source topics to merge (space-separated)"),
+    agent: Optional[str] = typer.Option(None, "--agent", help="Agent performing merge"),
+    update_worksets: bool = typer.Option(True, "--update-worksets/--no-update-worksets", help="Update shared state after merge"),
+    delete_sources: bool = typer.Option(False, "--delete-sources", help="Delete source topic directories after merge"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Analyze only, do not modify"),
+    output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
+):
+    """Merge one or more topics into a target and optionally update worksets state."""
+    ensure_core_on_path()
+    from kano_backlog_ops.topic import (
+        merge_topics,
+        update_worksets_after_merge,
+        TopicNotFoundError,
+        TopicError,
+    )
+
+    try:
+        result = merge_topics(
+            target,
+            sources,
+            agent=agent or "",
+            dry_run=dry_run,
+            delete_source_topics=delete_sources,
+        )
+    except TopicNotFoundError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if getattr(exc, "suggestion", None):
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except TopicError as exc:
+        typer.echo(f"❌ {exc.message}", err=True)
+        if getattr(exc, "suggestion", None):
+            typer.echo(f"   Suggestion: {exc.suggestion}", err=True)
+        raise typer.Exit(1)
+    except Exception as exc:
+        typer.echo(f"❌ Unexpected error: {exc}", err=True)
+        raise typer.Exit(2)
+
+    # Update worksets state if requested and not dry_run
+    if update_worksets and not dry_run:
+        try:
+            update_worksets_after_merge(target, sources)
+        except Exception as exc:
+            # Non-fatal; report and continue
+            typer.echo(f"⚠️  Worksets state update warning: {exc}", err=True)
+
+    if output_format == "json":
+        payload = {
+            "target": result.target_topic,
+            "sources": result.merged_topics,
+            "items": result.items_merged,
+            "materials": result.materials_merged,
+            "references_updated": result.references_updated,
+            "merged_at": result.merged_at,
+            "worksets_updated": update_worksets and not dry_run,
+            "deleted_sources": delete_sources,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        typer.echo(f"✓ Merged into '{result.target_topic}' at {result.merged_at}")
+        if result.merged_topics:
+            typer.echo(f"  Sources: {', '.join(result.merged_topics)}")
+        total_items = sum(len(v) for v in result.items_merged.values())
+        typer.echo(f"  Items merged: {total_items}")
+        if result.references_updated:
+            typer.echo(f"  References updated in: {', '.join(result.references_updated)}")
+        if update_worksets and not dry_run:
+            typer.echo("  Worksets state: updated")
+        if delete_sources:
+            typer.echo("  Source topics: deleted")
 
 
 @app.command()
@@ -987,7 +1062,7 @@ def snapshot_restore(
     agent: str = typer.Option(..., "--agent", help="Agent identity"),
     no_backup: bool = typer.Option(False, "--no-backup", help="Skip creating backup before restore"),
     manifest_only: bool = typer.Option(False, "--manifest-only", help="Restore manifest.json only"),
-    brief_only: bool = typer.Option(False, "--brief-only", help="Restore brief.md only"),
+    brief_only: bool = typer.Option(False, "--brief-only", help="Restore brief.generated.md only"),
     notes_only: bool = typer.Option(False, "--notes-only", help="Restore notes.md only"),
     output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
 ):
@@ -1373,7 +1448,7 @@ def migrate(
 
 @app.command("cleanup-legacy")
 def cleanup_legacy(
-    dry_run: bool = typer.Option(True, "--no-dry-run/--dry-run", help="Actually delete files (default: dry-run)"),
+    no_dry_run: bool = typer.Option(False, "--no-dry-run", help="Actually delete files (default: dry-run)"),
     output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
 ):
     """Remove legacy active_topic.<agent>.txt files (after migration)."""
@@ -1381,7 +1456,7 @@ def cleanup_legacy(
     from kano_backlog_ops.topic import cleanup_legacy_active_topics
 
     try:
-        result = cleanup_legacy_active_topics(dry_run=dry_run)
+        result = cleanup_legacy_active_topics(dry_run=not no_dry_run)
     except Exception as exc:
         typer.echo(f"❌ Error cleaning up: {exc}", err=True)
         raise typer.Exit(2)
@@ -1390,24 +1465,24 @@ def cleanup_legacy(
         payload = {
             "deleted": [str(p) for p in result],
             "count": len(result),
-            "dry_run": dry_run,
+            "dry_run": not no_dry_run,
         }
         typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         if not result:
             typer.echo("✓ No legacy files to clean up")
         else:
-            action = "Would delete" if dry_run else "Deleted"
+            action = "Would delete" if not no_dry_run else "Deleted"
             typer.echo(f"✓ {action} {len(result)} file(s):")
             for path in result:
                 typer.echo(f"  - {path}")
-            if dry_run:
+            if not no_dry_run:
                 typer.echo("  (use --no-dry-run to actually delete)")
 
 
 @app.command("migrate-filenames")
 def migrate_filenames(
-    dry_run: bool = typer.Option(True, "--no-dry-run/--dry-run", help="Actually rename files (default: dry-run)"),
+    no_dry_run: bool = typer.Option(False, "--no-dry-run", help="Actually rename files (default: dry-run)"),
     output_format: str = typer.Option("plain", "--format", help="Output format: plain|json"),
 ):
     """Migrate topic state filenames from {uuid}.json to {slug}_{uuid}.json format."""
@@ -1415,7 +1490,7 @@ def migrate_filenames(
     from kano_backlog_ops.topic import migrate_topic_state_filenames
 
     try:
-        result = migrate_topic_state_filenames(dry_run=dry_run)
+        result = migrate_topic_state_filenames(dry_run=not no_dry_run)
     except Exception as exc:
         typer.echo(f"❌ Error migrating filenames: {exc}", err=True)
         raise typer.Exit(2)
@@ -1424,17 +1499,17 @@ def migrate_filenames(
         payload = {
             "renamed": result,
             "count": len(result),
-            "dry_run": dry_run,
+            "dry_run": not no_dry_run,
         }
         typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         if not result:
             typer.echo("✓ No files to migrate (all already in new format)")
         else:
-            action = "Would rename" if dry_run else "Renamed"
+            action = "Would rename" if not no_dry_run else "Renamed"
             typer.echo(f"✓ {action} {len(result)} file(s):")
             for old_name, new_name in result.items():
                 typer.echo(f"  {old_name} → {new_name}")
-            if dry_run:
+            if not no_dry_run:
                 typer.echo("  (use --no-dry-run to actually rename)")
 

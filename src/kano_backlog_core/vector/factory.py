@@ -31,15 +31,23 @@ class NoOpBackend(VectorBackendAdapter):
 
 def get_backend(config: Dict[str, Any]) -> VectorBackendAdapter:
     """Factory for vector backends."""
-    backend_type = config.get("backend", "noop").lower()
-    
+
+    backend_type = str(config.get("backend", "noop")).strip().lower()
+
     if backend_type == "noop":
         return NoOpBackend()
-    
+
     if backend_type == "sqlite":
-        path = config.get("path", ".kano/vector/index.db")
-        collection = config.get("collection", "backlog")
+        path = str(config.get("path", ".kano/vector"))
+        collection = str(config.get("collection", "backlog"))
+        embedding_space_id = config.get("embedding_space_id")
         from .sqlite_backend import SQLiteVectorBackend
-        return SQLiteVectorBackend(path=path, collection=collection)
-    
+
+        return SQLiteVectorBackend(
+            path=path,
+            collection=collection,
+            embedding_space_id=str(embedding_space_id) if embedding_space_id else None,
+        )
+
     raise ValueError(f"Unknown vector backend: {backend_type}")
+
