@@ -589,7 +589,6 @@ def normalize_duplicate_ids(
             for path, uid, _ in group_sorted[1:]:
                 new_id = None
                 status = "would-remap"
-                new_path = path
                 if "decisions" in path.parts:
                     new_id = _next_ref_id_unique(product_root / "decisions", "ADR", used_ids)
                     used_ids.add(new_id)
