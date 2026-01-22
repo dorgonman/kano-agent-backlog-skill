@@ -54,3 +54,8 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 /src/kano_agent_backlog_skill.egg-info/
+
+# Vector databases and indexes (generated content)
+.cache/
+.kano/vector/
+.kano/*.sqlite3

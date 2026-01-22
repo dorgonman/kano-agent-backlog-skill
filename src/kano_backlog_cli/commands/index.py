@@ -75,3 +75,36 @@ def refresh(
     if result.items_updated or result.items_removed:
         typer.echo(f"  Updated: {result.items_updated}, Removed: {result.items_removed}")
     typer.echo(f"  Time: {result.refresh_time_ms:.1f} ms")
+
+
+@app.command()
+def status(
+    product: str | None = typer.Option(None, "--product", help="Product name (check all if omitted)"),
+    backlog_root: Path | None = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
+):
+    """Show SQLite index status and statistics."""
+    ensure_core_on_path()
+    from kano_backlog_ops.index import get_index_status
+
+    try:
+        result = get_index_status(product=product, backlog_root=backlog_root)
+    except FileNotFoundError as e:
+        typer.echo(f"❌ {e}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:  # pragma: no cover - defensive
+        typer.echo(f"❌ Unexpected error: {e}", err=True)
+        raise typer.Exit(2)
+
+    if not result.indexes:
+        typer.echo("No indexes found")
+        return
+
+    for idx in result.indexes:
+        typer.echo(f"📊 Index: {idx.product}")
+        typer.echo(f"  Path: {idx.index_path}")
+        typer.echo(f"  Status: {'✓ Exists' if idx.exists else '❌ Missing'}")
+        if idx.exists:
+            typer.echo(f"  Items: {idx.item_count}")
+            typer.echo(f"  Size: {idx.size_bytes:,} bytes")
+            typer.echo(f"  Modified: {idx.last_modified}")
+        typer.echo()

@@ -21,7 +21,7 @@ class EmbeddingConfig:
 @dataclass
 class VectorConfig:
     backend: str = "noop"
-    path: str = ".kano/vector"
+    path: str = ".cache/vector"
     collection: str = "backlog"
     metric: str = "cosine"
     options: Dict[str, Any] = field(default_factory=dict)
@@ -67,7 +67,7 @@ class PipelineConfig:
         v_data = data.get("vector", {})
         vector = VectorConfig(
             backend=v_data.get("backend", "noop"),
-            path=v_data.get("path", ".kano/vector"),
+            path=v_data.get("path", ".cache/vector"),
             collection=v_data.get("collection", "backlog"),
             metric=v_data.get("metric", "cosine"),
             options=v_data.get("options", {})

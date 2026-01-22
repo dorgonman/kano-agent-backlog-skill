@@ -23,7 +23,8 @@ def search_similar(
     *,
     query_text: str,
     product: str,
-    k: int = 10
+    k: int = 10,
+    backlog_root: Optional[Path] = None
 ) -> List[SearchResult]:
     """
     Search for similar chunks using vector similarity.
@@ -32,6 +33,7 @@ def search_similar(
         query_text: Text to search for
         product: Product name
         k: Number of results to return
+        backlog_root: Optional backlog root path
         
     Returns:
         List of search results sorted by similarity score
@@ -39,8 +41,9 @@ def search_similar(
     t0 = time.perf_counter()
     
     # Load config
+    resource_path = backlog_root or Path(".")
     ctx, effective = ConfigLoader.load_effective_config(
-        Path("."),
+        resource_path,
         product=product
     )
     

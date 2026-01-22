@@ -293,3 +293,51 @@ class SQLiteVectorBackend(VectorBackendAdapter):
         self._dims = int(dims) if dims is not None else self._dims
         self._metric = metric or self._metric
 
+    def get_stats(self) -> Dict[str, Any]:
+        """Get statistics about the vector index."""
+        self._ensure_connection()
+        assert self._conn is not None
+
+        # Ensure meta table exists
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+
+        # Check if chunks table exists
+        cursor = self._conn.execute(
+            f"""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='{self._collection}_chunks'
+            """
+        )
+        table_exists = cursor.fetchone() is not None
+
+        if not table_exists:
+            return {
+                "chunks_count": 0,
+                "dims": self._dims,
+                "metric": self._metric,
+                "embedding_space_id": self._embedding_space_id,
+                "table_exists": False,
+            }
+
+        # Get chunk count
+        cursor = self._conn.execute(f"SELECT COUNT(*) FROM {self._collection}_chunks")
+        chunks_count = cursor.fetchone()[0]
+
+        # Get metadata
+        dims = self._read_meta("dims")
+        metric = self._read_meta("metric")
+        embedding_space_id = self._read_meta("embedding_space_id")
+        schema_version = self._read_meta("schema_version")
+
+        return {
+            "chunks_count": chunks_count,
+            "dims": int(dims) if dims else self._dims,
+            "metric": metric or self._metric,
+            "embedding_space_id": embedding_space_id or self._embedding_space_id,
+            "schema_version": schema_version,
+            "table_exists": True,
+            "db_path": str(self._db_path) if self._db_path else None,
+        }
+

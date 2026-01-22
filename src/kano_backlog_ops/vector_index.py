@@ -8,11 +8,12 @@ import logging
 
 from kano_backlog_core.config import ConfigLoader
 from kano_backlog_core.canonical import CanonicalStore
-from kano_backlog_core.chunking import chunk_text
+from kano_backlog_core.chunking import chunk_text, ChunkingOptions
 from kano_backlog_core.tokenizer import resolve_model_max_tokens, resolve_tokenizer
-from kano_backlog_core.token_budget import enforce_token_budget
+from kano_backlog_core.token_budget import enforce_token_budget, budget_chunks
 from kano_backlog_core.embedding import resolve_embedder
 from kano_backlog_core.vector import VectorChunk, get_backend
+from kano_backlog_core.pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,168 @@ class VectorIndexResult:
     duration_ms: float
     backend_type: str
 
+@dataclass
+class IndexResult:
+    """Result of indexing a single document."""
+    chunks_count: int
+    tokens_total: int
+    duration_ms: float
+    backend_type: str
+    embedding_provider: str
+    chunks_trimmed: int = 0
+
+
+def index_document(
+    source_id: str,
+    text: str,
+    config: PipelineConfig,
+    *,
+    product_root: Optional[Path] = None
+) -> IndexResult:
+    """Index a single document through the complete embedding pipeline.
+    
+    Args:
+        source_id: Unique identifier for the document
+        text: Raw text content to index
+        config: Pipeline configuration with chunking, tokenizer, embedding, vector settings
+        product_root: Product root directory for resolving relative paths
+        
+    Returns:
+        IndexResult with telemetry data
+        
+    Raises:
+        ValueError: If source_id is empty or config is invalid
+        Exception: If any pipeline component fails
+    """
+    if not source_id:
+        raise ValueError("source_id must be non-empty")
+    
+    if not text:
+        # Handle empty text gracefully
+        return IndexResult(
+            chunks_count=0,
+            tokens_total=0,
+            duration_ms=0.0,
+            backend_type=config.vector.backend,
+            embedding_provider=config.embedding.provider,
+            chunks_trimmed=0
+        )
+    
+    t0 = time.perf_counter()
+    
+    try:
+        # 1. Resolve components from config
+        tokenizer = resolve_tokenizer(config.tokenizer.adapter, config.tokenizer.model)
+        
+        embed_cfg = {
+            "provider": config.embedding.provider,
+            "model": config.embedding.model,
+            "dimension": config.embedding.dimension,
+            **config.embedding.options
+        }
+        embedder = resolve_embedder(embed_cfg)
+        
+        # Create embedding space ID for backend isolation
+        max_tokens = config.tokenizer.max_tokens or resolve_model_max_tokens(config.tokenizer.model)
+        embedding_space_id = (
+            f"emb:{config.embedding.provider}:{config.embedding.model}:d{config.embedding.dimension}"
+            f"|tok:{config.tokenizer.adapter}:{config.tokenizer.model}:max{max_tokens}"
+            f"|chunk:{config.chunking.version}"
+            f"|metric:{config.vector.metric}"
+        )
+        
+        # Resolve vector path
+        vec_path = Path(config.vector.path)
+        if not vec_path.is_absolute() and product_root:
+            vec_path = product_root / vec_path
+        
+        vec_cfg = {
+            "backend": config.vector.backend,
+            "path": str(vec_path),
+            "collection": config.vector.collection,
+            "embedding_space_id": embedding_space_id,
+            **config.vector.options
+        }
+        backend = get_backend(vec_cfg)
+        backend.prepare(schema={}, dims=config.embedding.dimension, metric=config.vector.metric)
+        
+        # 2. Chunk and budget the text
+        budgeted = budget_chunks(
+            source_id=source_id,
+            text=text,
+            options=config.chunking,
+            tokenizer=tokenizer,
+            max_tokens=max_tokens
+        )
+        
+        if not budgeted:
+            return IndexResult(
+                chunks_count=0,
+                tokens_total=0,
+                duration_ms=(time.perf_counter() - t0) * 1000,
+                backend_type=config.vector.backend,
+                embedding_provider=config.embedding.provider,
+                chunks_trimmed=0
+            )
+        
+        # 3. Prepare chunks for embedding
+        chunk_texts = [chunk.text for chunk in budgeted]
+        
+        # 4. Generate embeddings
+        embedding_results = embedder.embed_batch(chunk_texts)
+        
+        # 5. Create VectorChunk objects and upsert to backend
+        chunks_indexed = 0
+        tokens_total = 0
+        chunks_trimmed = 0
+        
+        for i, (budgeted_chunk, embedding_result) in enumerate(zip(budgeted, embedding_results)):
+            tokens_total += budgeted_chunk.token_count.count
+            if budgeted_chunk.trimmed:
+                chunks_trimmed += 1
+                
+            vector_chunk = VectorChunk(
+                chunk_id=budgeted_chunk.chunk_id,
+                text=budgeted_chunk.text,
+                metadata={
+                    "source_id": source_id,
+                    "start_char": budgeted_chunk.start_char,
+                    "end_char": budgeted_chunk.end_char,
+                    "trimmed": budgeted_chunk.trimmed,
+                    "token_count": budgeted_chunk.token_count.count,
+                    "token_count_method": budgeted_chunk.token_count.method,
+                    "tokenizer_id": budgeted_chunk.token_count.tokenizer_id,
+                    "is_exact": budgeted_chunk.token_count.is_exact,
+                    "target_budget": budgeted_chunk.target_budget,
+                    "safety_margin": budgeted_chunk.safety_margin,
+                    "embedding_provider": config.embedding.provider,
+                    "embedding_model": config.embedding.model,
+                    "embedding_dimension": config.embedding.dimension,
+                },
+                vector=embedding_result.vector
+            )
+            
+            backend.upsert(vector_chunk)
+            chunks_indexed += 1
+        
+        # 6. Persist changes
+        backend.persist()
+        
+        duration_ms = (time.perf_counter() - t0) * 1000
+        
+        return IndexResult(
+            chunks_count=chunks_indexed,
+            tokens_total=tokens_total,
+            duration_ms=duration_ms,
+            backend_type=config.vector.backend,
+            embedding_provider=config.embedding.provider,
+            chunks_trimmed=chunks_trimmed
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to index document {source_id}: {e}")
+        raise
+
 def build_vector_index(
     *,
     product: str,
@@ -35,8 +198,9 @@ def build_vector_index(
     t0 = time.perf_counter()
     
     # Load config
+    resource_path = backlog_root or Path(".")
     ctx, effective = ConfigLoader.load_effective_config(
-        Path("."),
+        resource_path,
         product=product
     )
     
@@ -99,9 +263,26 @@ def build_vector_index(
             item = store.read(path)
             items_processed += 1
             
-            text_to_chunk = f"{item.title}"
-            if item.body:
-                text_to_chunk += f"\n\n{item.body}"
+            # Construct text from item fields
+            text_parts = [item.title]
+            
+            # Add structured content sections
+            if item.context:
+                text_parts.append(f"Context: {item.context}")
+            if item.goal:
+                text_parts.append(f"Goal: {item.goal}")
+            if item.approach:
+                text_parts.append(f"Approach: {item.approach}")
+            if item.acceptance_criteria:
+                text_parts.append(f"Acceptance Criteria: {item.acceptance_criteria}")
+            if item.risks:
+                text_parts.append(f"Risks: {item.risks}")
+            if item.non_goals:
+                text_parts.append(f"Non-Goals: {item.non_goals}")
+            if item.alternatives:
+                text_parts.append(f"Alternatives: {item.alternatives}")
+            
+            text_to_chunk = "\n\n".join(text_parts)
             
             raw_chunks = chunk_text(
                 source_id=item.id,

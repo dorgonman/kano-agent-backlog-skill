@@ -39,6 +39,23 @@ class IndexRefreshResult:
     refresh_time_ms: float
 
 
+@dataclass
+class IndexInfo:
+    """Information about a single index."""
+    product: str
+    index_path: Path
+    exists: bool
+    item_count: int = 0
+    size_bytes: int = 0
+    last_modified: str = ""
+
+
+@dataclass
+class IndexStatusResult:
+    """Result of checking index status."""
+    indexes: list[IndexInfo]
+
+
 def build_index(
     *,
     product: Optional[str] = None,
@@ -142,6 +159,76 @@ def refresh_index(
         items_removed=0,
         refresh_time_ms=elapsed_ms,
     )
+
+
+def get_index_status(
+    *,
+    product: Optional[str] = None,
+    backlog_root: Optional[Path] = None,
+) -> IndexStatusResult:
+    """
+    Get status information for SQLite indexes.
+
+    Args:
+        product: Product name (check all if not specified)
+        backlog_root: Root path for backlog
+
+    Returns:
+        IndexStatusResult with status details
+
+    Raises:
+        FileNotFoundError: If backlog not initialized
+    """
+    backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
+
+    def _product_index_path(prod_root: Path) -> Path:
+        cache_dir = prod_root / ".cache"
+        return cache_dir / "index.sqlite3"
+
+    def _get_index_info(prod_name: str, prod_root: Path) -> IndexInfo:
+        index_path = _product_index_path(prod_root)
+        exists = index_path.exists()
+        
+        info = IndexInfo(
+            product=prod_name,
+            index_path=index_path,
+            exists=exists
+        )
+        
+        if exists:
+            # Get file stats
+            stat = index_path.stat()
+            info.size_bytes = stat.st_size
+            info.last_modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Get item count from database
+            try:
+                conn = sqlite3.connect(index_path)
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM items")
+                info.item_count = cur.fetchone()[0]
+                conn.close()
+            except Exception:
+                info.item_count = 0
+        
+        return info
+
+    indexes = []
+    
+    if product:
+        prod_root = (backlog_root_path / "products" / product)
+        if not prod_root.exists():
+            raise FileNotFoundError(f"Product backlog not found: {prod_root}")
+        indexes.append(_get_index_info(product, prod_root))
+    else:
+        # Check all products
+        products_root = backlog_root_path / "products"
+        if not products_root.exists():
+            raise FileNotFoundError(f"No products directory at {products_root}")
+        for prod_dir in sorted(p for p in products_root.iterdir() if p.is_dir()):
+            indexes.append(_get_index_info(prod_dir.name, prod_dir))
+
+    return IndexStatusResult(indexes=indexes)
 
 
 def _scan_items(product_root: Path) -> Iterable[dict]:
