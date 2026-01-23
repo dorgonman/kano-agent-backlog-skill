@@ -23,6 +23,11 @@ def build_index(
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     force: bool = typer.Option(False, "--force", help="Force rebuild of existing index"),
     output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+    # Tokenizer configuration options
+    tokenizer_adapter: Optional[str] = typer.Option(None, "--tokenizer-adapter", help="Tokenizer adapter (auto, heuristic, tiktoken, huggingface)"),
+    tokenizer_model: Optional[str] = typer.Option(None, "--tokenizer-model", help="Override tokenizer model name"),
+    tokenizer_max_tokens: Optional[int] = typer.Option(None, "--tokenizer-max-tokens", help="Override max tokens for tokenizer"),
+    tokenizer_config: Optional[Path] = typer.Option(None, "--tokenizer-config", help="Path to tokenizer configuration file"),
 ):
     """Build embedding index for files or full product."""
     ensure_core_on_path()
@@ -32,6 +37,15 @@ def build_index(
     
     if file_path and text:
         raise typer.BadParameter("Use either file path or --text, not both")
+    
+    # Apply tokenizer configuration overrides if provided
+    tokenizer_overrides = {}
+    if tokenizer_adapter:
+        tokenizer_overrides["adapter"] = tokenizer_adapter
+    if tokenizer_model:
+        tokenizer_overrides["model"] = tokenizer_model
+    if tokenizer_max_tokens:
+        tokenizer_overrides["max_tokens"] = tokenizer_max_tokens
     
     if text:
         # Index single text input
@@ -45,6 +59,29 @@ def build_index(
         )
         pc = ConfigLoader.validate_pipeline_config(effective)
         
+        # Apply tokenizer overrides to pipeline config
+        if tokenizer_overrides:
+            # Create a copy of the tokenizer config and apply overrides
+            tokenizer_config_dict = pc.tokenizer.__dict__.copy()
+            tokenizer_config_dict.update(tokenizer_overrides)
+            
+            # Update the pipeline config with new tokenizer settings
+            from kano_backlog_core.pipeline_config import TokenizerConfig
+            pc.tokenizer = TokenizerConfig(**tokenizer_config_dict)
+        
+        # Load custom tokenizer config if provided
+        if tokenizer_config:
+            from kano_backlog_core.tokenizer_config import load_tokenizer_config
+            custom_config = load_tokenizer_config(config_path=tokenizer_config)
+            
+            # Apply custom config to pipeline config
+            pc.tokenizer.adapter = custom_config.adapter
+            pc.tokenizer.model = custom_config.model
+            if custom_config.max_tokens:
+                pc.tokenizer.max_tokens = custom_config.max_tokens
+            pc.tokenizer.fallback_chain = custom_config.fallback_chain
+            pc.tokenizer.options = custom_config.options
+        
         # Index the text
         result = index_document(source_id, text, pc, product_root=ctx.product_root)
         
@@ -57,6 +94,8 @@ def build_index(
                 "backend_type": result.backend_type,
                 "embedding_provider": result.embedding_provider,
                 "chunks_trimmed": result.chunks_trimmed,
+                "tokenizer_adapter": pc.tokenizer.adapter,
+                "tokenizer_model": pc.tokenizer.model,
             }
             typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
             return
@@ -67,6 +106,8 @@ def build_index(
         typer.echo(f"- duration_ms: {result.duration_ms:.2f}")
         typer.echo(f"- backend_type: {result.backend_type}")
         typer.echo(f"- embedding_provider: {result.embedding_provider}")
+        typer.echo(f"- tokenizer_adapter: {pc.tokenizer.adapter}")
+        typer.echo(f"- tokenizer_model: {pc.tokenizer.model}")
         if result.chunks_trimmed > 0:
             typer.echo(f"- chunks_trimmed: {result.chunks_trimmed}")
         
@@ -84,6 +125,29 @@ def build_index(
             product=product
         )
         pc = ConfigLoader.validate_pipeline_config(effective)
+        
+        # Apply tokenizer overrides to pipeline config
+        if tokenizer_overrides:
+            # Create a copy of the tokenizer config and apply overrides
+            tokenizer_config_dict = pc.tokenizer.__dict__.copy()
+            tokenizer_config_dict.update(tokenizer_overrides)
+            
+            # Update the pipeline config with new tokenizer settings
+            from kano_backlog_core.pipeline_config import TokenizerConfig
+            pc.tokenizer = TokenizerConfig(**tokenizer_config_dict)
+        
+        # Load custom tokenizer config if provided
+        if tokenizer_config:
+            from kano_backlog_core.tokenizer_config import load_tokenizer_config
+            custom_config = load_tokenizer_config(config_path=tokenizer_config)
+            
+            # Apply custom config to pipeline config
+            pc.tokenizer.adapter = custom_config.adapter
+            pc.tokenizer.model = custom_config.model
+            if custom_config.max_tokens:
+                pc.tokenizer.max_tokens = custom_config.max_tokens
+            pc.tokenizer.fallback_chain = custom_config.fallback_chain
+            pc.tokenizer.options = custom_config.options
         
         # Read file content
         try:
@@ -107,6 +171,8 @@ def build_index(
                 "backend_type": result.backend_type,
                 "embedding_provider": result.embedding_provider,
                 "chunks_trimmed": result.chunks_trimmed,
+                "tokenizer_adapter": pc.tokenizer.adapter,
+                "tokenizer_model": pc.tokenizer.model,
             }
             typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
             return
@@ -118,12 +184,20 @@ def build_index(
         typer.echo(f"- duration_ms: {result.duration_ms:.2f}")
         typer.echo(f"- backend_type: {result.backend_type}")
         typer.echo(f"- embedding_provider: {result.embedding_provider}")
+        typer.echo(f"- tokenizer_adapter: {pc.tokenizer.adapter}")
+        typer.echo(f"- tokenizer_model: {pc.tokenizer.model}")
         if result.chunks_trimmed > 0:
             typer.echo(f"- chunks_trimmed: {result.chunks_trimmed}")
         
     else:
         # Build full product index
         from kano_backlog_ops.vector_index import build_vector_index
+        
+        # For full product index, tokenizer overrides need to be applied differently
+        # This would require modifying the build_vector_index function to accept overrides
+        if tokenizer_overrides or tokenizer_config:
+            typer.echo("⚠️  Tokenizer overrides not yet supported for full product index builds.", err=True)
+            typer.echo("   Use file-specific or text-specific indexing for custom tokenizer settings.", err=True)
         
         result = build_vector_index(
             product=product,
@@ -158,6 +232,10 @@ def query_index(
     product: str = typer.Option("kano-agent-backlog-skill", "--product", help="Product name"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+    # Tokenizer configuration options
+    tokenizer_adapter: Optional[str] = typer.Option(None, "--tokenizer-adapter", help="Tokenizer adapter (auto, heuristic, tiktoken, huggingface)"),
+    tokenizer_model: Optional[str] = typer.Option(None, "--tokenizer-model", help="Override tokenizer model name"),
+    tokenizer_config: Optional[Path] = typer.Option(None, "--tokenizer-config", help="Path to tokenizer configuration file"),
 ):
     """Query the embedding index for similar content."""
     ensure_core_on_path()
@@ -173,6 +251,25 @@ def query_index(
         product=product
     )
     pc = ConfigLoader.validate_pipeline_config(effective)
+    
+    # Apply tokenizer overrides if provided
+    if tokenizer_adapter:
+        pc.tokenizer.adapter = tokenizer_adapter
+    if tokenizer_model:
+        pc.tokenizer.model = tokenizer_model
+    
+    # Load custom tokenizer config if provided
+    if tokenizer_config:
+        from kano_backlog_core.tokenizer_config import load_tokenizer_config
+        custom_config = load_tokenizer_config(config_path=tokenizer_config)
+        
+        # Apply custom config to pipeline config
+        pc.tokenizer.adapter = custom_config.adapter
+        pc.tokenizer.model = custom_config.model
+        if custom_config.max_tokens:
+            pc.tokenizer.max_tokens = custom_config.max_tokens
+        pc.tokenizer.fallback_chain = custom_config.fallback_chain
+        pc.tokenizer.options = custom_config.options
     
     # Resolve embedder
     embed_cfg = {
@@ -222,6 +319,8 @@ def query_index(
                 "query": query_text,
                 "k": k,
                 "duration_ms": query_duration_ms,
+                "tokenizer_adapter": pc.tokenizer.adapter,
+                "tokenizer_model": pc.tokenizer.model,
                 "results": [
                     {
                         "chunk_id": result.chunk_id,
@@ -239,6 +338,8 @@ def query_index(
         typer.echo(f"- k: {k}")
         typer.echo(f"- duration_ms: {query_duration_ms:.2f}")
         typer.echo(f"- results_count: {len(search_results)}")
+        typer.echo(f"- tokenizer_adapter: {pc.tokenizer.adapter}")
+        typer.echo(f"- tokenizer_model: {pc.tokenizer.model}")
         typer.echo()
         
         for i, result in enumerate(search_results, 1):
@@ -335,6 +436,22 @@ def index_status(
         typer.echo("## Statistics")
         for key, value in stats.items():
             typer.echo(f"- {key}: {value}")
+            
+        # Show tokenizer adapter status
+        try:
+            from kano_backlog_core.tokenizer import get_default_registry
+            registry = get_default_registry()
+            adapter_status = registry.get_adapter_status_with_dependencies()
+            
+            typer.echo()
+            typer.echo("## Tokenizer Adapter Status")
+            for adapter_name, info in adapter_status.items():
+                status_emoji = "✅" if info["available"] else "❌"
+                typer.echo(f"- {status_emoji} {adapter_name}: {'Available' if info['available'] else 'Not available'}")
+                if not info["available"] and info.get("error"):
+                    typer.echo(f"  Error: {info['error']}")
+        except Exception as e:
+            typer.echo(f"- tokenizer_status_error: {e}")
             
     except Exception as e:
         typer.echo(f"Error getting index status: {e}", err=True)

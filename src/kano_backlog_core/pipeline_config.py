@@ -3,15 +3,35 @@ from typing import Any, Dict, List, Optional
 
 from .chunking import ChunkingOptions
 from .tokenizer import resolve_tokenizer, get_default_registry, DEFAULT_MAX_TOKENS
+from .tokenizer_config import TokenizerConfig as ComprehensiveTokenizerConfig, load_tokenizer_config
 from .embedding import resolve_embedder
 
 @dataclass
 class TokenizerConfig:
+    """Legacy tokenizer configuration for backward compatibility.
+    
+    This class is maintained for backward compatibility with existing code.
+    New code should use the comprehensive TokenizerConfig from tokenizer_config module.
+    """
     adapter: str = "auto"  # Changed default to "auto" for fallback chain
     model: str = "text-embedding-3-small"
     max_tokens: Optional[int] = None
     fallback_chain: Optional[List[str]] = None  # Optional custom fallback chain
     options: Dict[str, Any] = field(default_factory=dict)  # Adapter-specific options
+    
+    def to_comprehensive_config(self) -> ComprehensiveTokenizerConfig:
+        """Convert to comprehensive tokenizer configuration."""
+        config_dict = {
+            "adapter": self.adapter,
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "options": self.options
+        }
+        
+        if self.fallback_chain:
+            config_dict["fallback_chain"] = self.fallback_chain
+        
+        return load_tokenizer_config(config_dict=config_dict)
 
 @dataclass
 class EmbeddingConfig:
@@ -89,17 +109,21 @@ class PipelineConfig:
         """Validate configuration consistency."""
         # 1. Try to resolve tokenizer to ensure adapter exists
         try:
+            # Use comprehensive configuration for validation
+            comprehensive_config = self.tokenizer.to_comprehensive_config()
+            comprehensive_config.validate()
+            
             registry = get_default_registry()
             
             # Set custom fallback chain if provided
-            if self.tokenizer.fallback_chain:
-                registry.set_fallback_chain(self.tokenizer.fallback_chain)
+            if comprehensive_config.fallback_chain:
+                registry.set_fallback_chain(comprehensive_config.fallback_chain)
             
             # Try to resolve the tokenizer
             resolve_tokenizer(
-                self.tokenizer.adapter, 
-                self.tokenizer.model,
-                max_tokens=self.tokenizer.max_tokens,
+                comprehensive_config.adapter, 
+                comprehensive_config.model,
+                max_tokens=comprehensive_config.max_tokens,
                 registry=registry
             )
         except Exception as e:
