@@ -8,7 +8,7 @@ import logging
 
 from kano_backlog_core.config import ConfigLoader
 from kano_backlog_core.canonical import CanonicalStore
-from kano_backlog_core.chunking import chunk_text, ChunkingOptions
+from kano_backlog_core.chunking import chunk_text, chunk_text_with_tokenizer, ChunkingOptions
 from kano_backlog_core.tokenizer import resolve_model_max_tokens, resolve_tokenizer
 from kano_backlog_core.token_budget import enforce_token_budget, budget_chunks
 from kano_backlog_core.embedding import resolve_embedder
@@ -111,16 +111,17 @@ def index_document(
         backend = get_backend(vec_cfg)
         backend.prepare(schema={}, dims=config.embedding.dimension, metric=config.vector.metric)
         
-        # 2. Chunk and budget the text
-        budgeted = budget_chunks(
+        # 2. Chunk the text using enhanced chunking with tokenizer integration
+        # Use the new chunk_text_with_tokenizer for better accuracy
+        raw_chunks = chunk_text_with_tokenizer(
             source_id=source_id,
             text=text,
             options=config.chunking,
             tokenizer=tokenizer,
-            max_tokens=max_tokens
+            model_name=config.tokenizer.model
         )
         
-        if not budgeted:
+        if not raw_chunks:
             return IndexResult(
                 chunks_count=0,
                 tokens_total=0,
@@ -130,39 +131,51 @@ def index_document(
                 chunks_trimmed=0
             )
         
-        # 3. Prepare chunks for embedding
-        chunk_texts = [chunk.text for chunk in budgeted]
+        # 3. Apply token budgeting to each chunk
+        budgeted_chunks = []
+        for chunk in raw_chunks:
+            budgeted = enforce_token_budget(
+                chunk.text,
+                tokenizer,
+                max_tokens=max_tokens
+            )
+            budgeted_chunks.append(budgeted)
         
-        # 4. Generate embeddings
+        # 4. Prepare chunks for embedding
+        chunk_texts = [budgeted.content for budgeted in budgeted_chunks]
+        
+        # 5. Generate embeddings
         embedding_results = embedder.embed_batch(chunk_texts)
         
-        # 5. Create VectorChunk objects and upsert to backend
+        # 6. Create VectorChunk objects and upsert to backend
         chunks_indexed = 0
         tokens_total = 0
         chunks_trimmed = 0
         
-        for i, (budgeted_chunk, embedding_result) in enumerate(zip(budgeted, embedding_results)):
-            tokens_total += budgeted_chunk.token_count.count
-            if budgeted_chunk.trimmed:
+        for i, (raw_chunk, budgeted, embedding_result) in enumerate(zip(raw_chunks, budgeted_chunks, embedding_results)):
+            tokens_total += budgeted.token_count.count
+            if budgeted.trimmed:
                 chunks_trimmed += 1
                 
             vector_chunk = VectorChunk(
-                chunk_id=budgeted_chunk.chunk_id,
-                text=budgeted_chunk.text,
+                chunk_id=raw_chunk.chunk_id,
+                text=budgeted.content,
                 metadata={
                     "source_id": source_id,
-                    "start_char": budgeted_chunk.start_char,
-                    "end_char": budgeted_chunk.end_char,
-                    "trimmed": budgeted_chunk.trimmed,
-                    "token_count": budgeted_chunk.token_count.count,
-                    "token_count_method": budgeted_chunk.token_count.method,
-                    "tokenizer_id": budgeted_chunk.token_count.tokenizer_id,
-                    "is_exact": budgeted_chunk.token_count.is_exact,
-                    "target_budget": budgeted_chunk.target_budget,
-                    "safety_margin": budgeted_chunk.safety_margin,
+                    "start_char": raw_chunk.start_char,
+                    "end_char": raw_chunk.end_char,
+                    "trimmed": budgeted.trimmed,
+                    "token_count": budgeted.token_count.count,
+                    "token_count_method": budgeted.token_count.method,
+                    "tokenizer_id": budgeted.token_count.tokenizer_id,
+                    "is_exact": budgeted.token_count.is_exact,
+                    "target_budget": budgeted.target_budget,
+                    "safety_margin": budgeted.safety_margin,
                     "embedding_provider": config.embedding.provider,
                     "embedding_model": config.embedding.model,
                     "embedding_dimension": config.embedding.dimension,
+                    "chunking_method": "tokenizer_aware",  # New telemetry field
+                    "tokenizer_adapter": config.chunking.tokenizer_adapter,  # New telemetry field
                 },
                 vector=embedding_result.vector
             )
@@ -284,10 +297,12 @@ def build_vector_index(
             
             text_to_chunk = "\n\n".join(text_parts)
             
-            raw_chunks = chunk_text(
+            raw_chunks = chunk_text_with_tokenizer(
                 source_id=item.id,
                 text=text_to_chunk,
                 options=pc.chunking,
+                tokenizer=tokenizer,
+                model_name=pc.tokenizer.model
             )
 
             for rc in raw_chunks:

@@ -13,6 +13,7 @@ from .chunking import (
     ChunkingOptions,
     build_chunk_id,
     chunk_text,
+    chunk_text_with_tokenizer,
     normalize_text,
     token_spans,
 )
@@ -24,6 +25,9 @@ from .tokenizer import (
     TokenizerAdapter,
     resolve_model_max_tokens,
     resolve_tokenizer,
+    get_supported_huggingface_models,
+    is_sentence_transformers_model,
+    suggest_huggingface_model,
 )
 from .token_budget import (
     BudgetedChunk,
@@ -70,6 +74,7 @@ __all__ = [
     "ChunkingOptions",
     "build_chunk_id",
     "chunk_text",
+    "chunk_text_with_tokenizer",
     "normalize_text",
     "token_spans",
     "DEFAULT_MAX_TOKENS",
@@ -79,6 +84,9 @@ __all__ = [
     "TokenizerAdapter",
     "resolve_model_max_tokens",
     "resolve_tokenizer",
+    "get_supported_huggingface_models",
+    "is_sentence_transformers_model",
+    "suggest_huggingface_model",
     "BudgetedChunk",
     "TokenBudgetPolicy",
     "TokenBudgetResult",

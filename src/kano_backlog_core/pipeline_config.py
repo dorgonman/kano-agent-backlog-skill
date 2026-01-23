@@ -1,15 +1,17 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .chunking import ChunkingOptions
-from .tokenizer import resolve_tokenizer, DEFAULT_MAX_TOKENS
+from .tokenizer import resolve_tokenizer, get_default_registry, DEFAULT_MAX_TOKENS
 from .embedding import resolve_embedder
 
 @dataclass
 class TokenizerConfig:
-    adapter: str = "heuristic"
+    adapter: str = "auto"  # Changed default to "auto" for fallback chain
     model: str = "text-embedding-3-small"
     max_tokens: Optional[int] = None
+    fallback_chain: Optional[List[str]] = None  # Optional custom fallback chain
+    options: Dict[str, Any] = field(default_factory=dict)  # Adapter-specific options
 
 @dataclass
 class EmbeddingConfig:
@@ -43,15 +45,18 @@ class PipelineConfig:
             target_tokens=c_data.get("target_tokens", 256),
             max_tokens=c_data.get("max_tokens", 512),
             overlap_tokens=c_data.get("overlap_tokens", 32),
-            version=c_data.get("version", "chunk-v1")
+            version=c_data.get("version", "chunk-v1"),
+            tokenizer_adapter=c_data.get("tokenizer_adapter", "auto")
         )
 
         # Tokenizer
         t_data = data.get("tokenizer", {})
         tokenizer = TokenizerConfig(
-            adapter=t_data.get("adapter", "heuristic"),
+            adapter=t_data.get("adapter", "auto"),
             model=t_data.get("model", "text-embedding-3-small"),
-            max_tokens=t_data.get("max_tokens")
+            max_tokens=t_data.get("max_tokens"),
+            fallback_chain=t_data.get("fallback_chain"),
+            options=t_data.get("options", {})
         )
 
         # Embedding
@@ -84,7 +89,19 @@ class PipelineConfig:
         """Validate configuration consistency."""
         # 1. Try to resolve tokenizer to ensure adapter exists
         try:
-            resolve_tokenizer(self.tokenizer.adapter, self.tokenizer.model)
+            registry = get_default_registry()
+            
+            # Set custom fallback chain if provided
+            if self.tokenizer.fallback_chain:
+                registry.set_fallback_chain(self.tokenizer.fallback_chain)
+            
+            # Try to resolve the tokenizer
+            resolve_tokenizer(
+                self.tokenizer.adapter, 
+                self.tokenizer.model,
+                max_tokens=self.tokenizer.max_tokens,
+                registry=registry
+            )
         except Exception as e:
             raise ValueError(f"Invalid tokenizer config: {e}")
 
