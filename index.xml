@@ -12,7 +12,7 @@
     <description>Local-first backlog workflow. Use when planning work, creating/updating backlog items, writing ADRs, enforcing Ready gate, generating views, or maintaining derived indexes (SQLite/FTS/embeddings).</description>
     <pubDate>Fri, 23 Jan 2026 11:28:53 GMT</pubDate>
   </item><item>
-    <title>index</title>
+    <title>Kano Agent Backlog Skill</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/</guid>
     <description>kano-agent-backlog-skill AI Agent Skills for Spec-Driven Agentic Programming | Local-first backlog | Multi-agent collaboration | Durable decision trail Local-first backlog ...</description>
