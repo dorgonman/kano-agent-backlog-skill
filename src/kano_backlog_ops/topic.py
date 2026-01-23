@@ -2733,6 +2733,14 @@ def create_topic_snapshot(
 
     # Generate snapshot metadata
     now = _now_timestamp()
+
+    # Enforce unique snapshot_name within a topic.
+    # Filenames include timestamps, so we must check by the sanitized name.
+    safe_name = re.sub(r"[^\w\-_]", "_", snapshot_name)
+    existing = list(snapshots_path.glob(f"*_{safe_name}.json"))
+    if existing:
+        raise TopicError(f"Snapshot '{snapshot_name}' already exists")
+
     snapshot_filename = _generate_snapshot_filename(snapshot_name, now)
     snapshot_path = snapshots_path / snapshot_filename
 

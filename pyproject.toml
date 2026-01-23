@@ -51,7 +51,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=kano_backlog_core --cov-report=term-missing --cov-report=html"
+addopts = "-p no:cacheprovider"
 
 [tool.black]
 line-length = 100

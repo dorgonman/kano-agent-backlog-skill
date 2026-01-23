@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -271,10 +272,20 @@ def run_phase1(*, version: str, repo_root: Optional[Path] = None) -> PhaseReport
     )
 
 
-def _run_cmd(cmd: List[str], *, cwd: Optional[Path] = None, timeout_s: int = 180) -> Tuple[int, str]:
+def _run_cmd(
+    cmd: List[str],
+    *,
+    cwd: Optional[Path] = None,
+    timeout_s: int = 180,
+    env: Optional[Dict[str, str]] = None,
+) -> Tuple[int, str]:
+    base_env = os.environ.copy()
+    if env:
+        base_env.update(env)
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
+        env=base_env,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -324,6 +335,8 @@ def run_phase2(
     )
 
     # pytest
+    pytest_tmp_root = repo_root / "_kano" / "backlog" / "_tmp_tests" / "pytest"
+    pytest_tmp_root.mkdir(parents=True, exist_ok=True)
     rc, out = _run_cmd(
         [
             py,
@@ -331,14 +344,18 @@ def run_phase2(
             "pytest",
             "skills/kano-agent-backlog-skill/tests",
             "-q",
-            "--no-cov",
             "-p",
             "no:cacheprovider",
+            "-p",
+            "no:pytest_cov",
             "--basetemp",
-            ".tmp/pytest-basetemp",
+            str(pytest_tmp_root / "basetemp"),
         ],
         cwd=repo_root,
         timeout_s=240,
+        env={
+            "COVERAGE_FILE": str(pytest_tmp_root / ".coverage"),
+        },
     )
     write_artifact("phase2_pytest.txt", out)
     checks.append(
