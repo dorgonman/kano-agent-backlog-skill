@@ -10,7 +10,61 @@
     <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/cli/</link>
     <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/cli/</guid>
     <description>CLI Reference kano-backlog Usage: kano-backlog [OPTIONS] COMMAND [ARGS].. kano-backlog: Backlog management CLI (MVP) +- Options -------------------------------------------------------------------+ | --install-completion Install completion for the current shell.</description>
-    <pubDate>Sat, 24 Jan 2026 05:37:33 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Kano Agent Backlog Skill</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/</guid>
+    <description>Kano Agent Backlog Skill AI Agent Skills for Spec-Driven Agentic Programming Navigation Demo &amp; Examples - Demonstration repository and usage examples Skill Documentation ...</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Architecture Decisions</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/</guid>
+    <description>Architecture Decisions Architecture Decision Records and design rationale ADR-0001_backlog-structure-and-moc ADR-0002_decisions-as-adr-links ADR-0003-appendix_collision-report-cli-spec ...</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Examples &amp; Templates</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/examples/</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/examples/</guid>
+    <description>Examples &amp; Templates Code examples and templates.</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Technical References</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/</guid>
+    <description>Technical References Technical documentation and references.</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>README</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/README</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/README</guid>
+    <description>_kano/backlog/decisions Store ADRs here. Link ADR IDs in work items via the decisions field and append a Worklog entry when a decision affects scope or approach.</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Per-Product Isolated Index Architecture</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0032_per-product-isolated-index-architecture</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0032_per-product-isolated-index-architecture</guid>
+    <description>Context In a multi-product monorepo environment, we needed to decide between two architectural approaches for the SQLite index: Platform-level shared index: All products write ...</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Per-Product Isolated Index Architecture</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0031_per-product-isolated-index-architecture</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0031_per-product-isolated-index-architecture</guid>
+    <description>Context In a multi-product monorepo environment, we needed to decide between two architectural approaches for the SQLite index: Platform-level shared index: All products write ...</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Per-Product Isolated Index Architecture</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0028_per-product-isolated-index-architecture</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0028_per-product-isolated-index-architecture</guid>
+    <description>Context In a multi-product monorepo environment, we needed to decide between two architectural approaches for the SQLite index: Platform-level shared index: All products write ...</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
+  </item><item>
+    <title>Product Column Retention in Per-Product Indexes</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0029_product-column-retention-rationale</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/ADR-0029_product-column-retention-rationale</guid>
+    <description>Context When implementing per-product isolated indexes, a question arose: if each product owns its own SQLite database, why include a product column in the schema? Arguments for ...</description>
+    <pubDate>Sat, 24 Jan 2026 05:41:28 GMT</pubDate>
   </item>
     </channel>
   </rss>
