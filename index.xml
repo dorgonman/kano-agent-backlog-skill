@@ -10,61 +10,61 @@
     <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/cli/</link>
     <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/cli/</guid>
     <description>CLI Reference kano-backlog Usage: kano-backlog [OPTIONS] COMMAND [ARGS].. kano-backlog: Backlog management CLI (MVP) +- Options -------------------------------------------------------------------+ | --install-completion Install completion for the current shell.</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
     <title>Kano Agent Backlog Skill</title>
     <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/</link>
     <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/</guid>
     <description>Kano Agent Backlog Skill AI Agent Skills for Spec-Driven Agentic Programming Navigation Demo &amp; Examples - Demonstration repository and usage examples Skill Documentation ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
     <title>Technical References</title>
     <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/</link>
     <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/</guid>
-    <description>Technical References Technical documentation and references.</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <description>Technical References Technical documentation and references README README README README README README README README README README README .</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
-    <title>Architecture Decisions</title>
-    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/</link>
-    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/adr/</guid>
-    <description>Architecture Decisions Architecture Decision Records and design rationale.</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <title>workflow</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/workflow</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/workflow</guid>
+    <description>Workflow SOP A) Planning (discussion → tickets) Create or update Epic for the milestone. Split into Features (capabilities). Split into UserStories (user perspective).</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
-    <title>Examples &amp; Templates</title>
-    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/examples/</link>
-    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/examples/</guid>
-    <description>Examples &amp; Templates Code examples and templates.</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <title>views</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/views</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/views</guid>
+    <description>Views (Obsidian Dataview) If you want fewer plugin dependencies, consider Obsidian Bases as a plugin-free alternative for table-style dashboards. See references/bases.md.</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
-    <title>changelog</title>
-    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/changelog</link>
-    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/changelog</guid>
-    <description>Changelog All notable changes to kano-agent-backlog-skill will be documented in this file. This project uses Git tags as releases: vX.Y.Z. [Unreleased] [0.0.2] - 2026-01-19 Added Topic templates/archetypes with variable substitution and CLI integration.</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <title>templates</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/templates</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/templates</guid>
+    <description>Templates Work item template Place the file under _kano/backlog/items/&lt;type&gt;/. Use the ID prefix derived from config/profile.env → PROJECT_NAME (example: kano-agent-backlog-skill-demo → KABSD).</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
-    <title>reference</title>
-    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/reference</link>
-    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/reference</guid>
-    <description>Reference Index The references/ folder is intentionally split into multiple small files so an agent (or a human) can load only what’s needed. Files under references/ schema.md: item types, states, naming rules, Ready gate templates.md: work item + ADR templates workflow.md: SOP for planning/decisions/worklog views.md: view patterns (Dataview + plain Markdown generators) bases.md: Obsidian Bases notes (plugin-free table-style views) logging.md: audit log schema, redaction, rotation defaults processes.md: process profile schema and examples indexing.md: optional indexing layer (artifacts, config, rebuild workflow) context_graph.md: context graph + Graph-assisted retrieval (weak graph) indexing_schema.sql: optional DB index schema (SQLite-first) indexing_schema.json: DB schema description (machine-readable) Kano CLI (automation surface) scripts/ now ships a single entrypoint (scripts/kano).</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <title>processes</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/processes</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/processes</guid>
+    <description>Process Profiles Process profiles define work item types, states, and transitions for the local backlog. They are intended to be human-readable and easy to adjust for agent workflows.</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
-    <title>readme</title>
-    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/readme</link>
-    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/readme</guid>
-    <description>kano-agent-backlog-skill AI Agent Skills for Spec-Driven Agentic Programming | Local-first backlog | Multi-agent collaboration | Durable decision trail Local-first backlog ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <title>schema</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/schema</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/schema</guid>
+    <description>Backlog Schema Process-defined types and states Item types and states come from the active process profile. See references/processes.md and the profile selected via _kano/backlog/_config/config.json (process.profile or process.path).</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
-    <title>Skill Documentation</title>
-    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/</link>
-    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/skill/</guid>
-    <description>Skill Documentation Core skill implementation and reference Skill Guide Skill README API Reference Changelog .</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <title>logging</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/logging</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/logging</guid>
+    <description>Audit Logging (Agent Tool Invocations) Log location (default) Root: _kano/backlog/_shared/logs/agent_tools/ (cross-product shared) File: tool_invocations.jsonl Log format ...</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item><item>
-    <title>Demo &amp; Examples</title>
-    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/demo/</link>
-    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/demo/</guid>
-    <description>Demo &amp; Examples Demonstration repository and usage examples Demo Overview .</description>
-    <pubDate>Sat, 24 Jan 2026 05:44:35 GMT</pubDate>
+    <title>embedding_pipeline</title>
+    <link>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/embedding_pipeline</link>
+    <guid>https://https:/dorgonman.github.io/kano-agent-backlog-skill/references/embedding_pipeline</guid>
+    <description>Embedding Pipeline Configuration The embedding pipeline enables semantic search and similarity analysis across backlog items through vector embeddings ...</description>
+    <pubDate>Sat, 24 Jan 2026 06:13:29 GMT</pubDate>
   </item>
     </channel>
   </rss>
