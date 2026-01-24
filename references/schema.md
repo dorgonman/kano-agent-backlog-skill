@@ -1,5 +1,25 @@
 # Backlog Schema
 
+## Directory structure
+
+```
+_kano/backlog/products/<product>/
+├── _config/          # Product configuration (config.toml, profile.env)
+├── _meta/            # Schema, conventions, and metadata
+├── _trash/           # Archived/deleted items (timestamped)
+├── .cache/           # Generated indexes (SQLite, embeddings)
+├── artifacts/        # Work outputs organized by item ID
+│   └── <item-id>/    # Demo reports, analysis, diagrams, test results
+├── decisions/        # ADR decision records
+├── items/            # Backlog items organized by type and bucket
+│   ├── epic/
+│   ├── feature/
+│   ├── userstory/
+│   ├── task/
+│   └── bug/
+└── views/            # Generated dashboards and reports
+```
+
 ## Process-defined types and states
 
 Item types and states come from the active process profile. See

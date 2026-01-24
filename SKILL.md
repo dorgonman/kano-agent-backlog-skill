@@ -83,6 +83,7 @@ Use this skill to:
 - `python skills/kano-agent-backlog-skill/scripts/kano-backlog workitem update-state ...` auto-syncs parent states forward-only by default; use `--no-sync-parent`
   for manual re-plans where parent state should stay put.
 - Add Obsidian `[[wikilink]]` references in the body (e.g., a `## Links` section) so Graph/backlinks work; frontmatter alone does not create graph edges.
+- Artifacts storage: Demo reports, implementation summaries, analysis documents, and other work outputs should be stored in `artifacts/<item-id>/` for the corresponding work item to maintain traceability and context.
 
 ## Agent compatibility: read the whole skill
 

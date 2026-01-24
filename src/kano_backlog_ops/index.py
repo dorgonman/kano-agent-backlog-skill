@@ -237,12 +237,12 @@ def _scan_items(product_root: Path) -> Iterable[dict]:
         try:
             item = store.read(path)
         except Exception:
-            continue  # skip unreadable files
+            continue
         stat = os.stat(path)
         mtime = stat.st_mtime
         yield {
-            "id": item.id,
             "uid": item.uid,
+            "id": item.id,
             "type": item.type.value,
             "state": item.state.value,
             "title": item.title,
@@ -271,8 +271,9 @@ def _rebuild_sqlite_index(index_path: Path, product_root: Path) -> int:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS items (
-                id TEXT PRIMARY KEY,
-                uid TEXT,
+                uid TEXT PRIMARY KEY,
+                id TEXT NOT NULL,
+                product TEXT NOT NULL,
                 type TEXT,
                 state TEXT,
                 title TEXT,
@@ -284,9 +285,10 @@ def _rebuild_sqlite_index(index_path: Path, product_root: Path) -> int:
                 tags TEXT,
                 created TEXT,
                 updated TEXT,
-                product TEXT,
                 path TEXT,
-                mtime REAL
+                mtime REAL,
+                UNIQUE(product, id),
+                UNIQUE(path)
             )
             """
         )
@@ -295,11 +297,11 @@ def _rebuild_sqlite_index(index_path: Path, product_root: Path) -> int:
             cur.executemany(
                 """
                 INSERT INTO items (
-                    id, uid, type, state, title, priority, parent, owner, area,
-                    iteration, tags, created, updated, product, path, mtime
+                    uid, id, product, type, state, title, priority, parent, owner, area,
+                    iteration, tags, created, updated, path, mtime
                 ) VALUES (
-                    :id, :uid, :type, :state, :title, :priority, :parent, :owner, :area,
-                    :iteration, :tags, :created, :updated, :product, :path, :mtime
+                    :uid, :id, :product, :type, :state, :title, :priority, :parent, :owner, :area,
+                    :iteration, :tags, :created, :updated, :path, :mtime
                 )
                 """,
                 rows,

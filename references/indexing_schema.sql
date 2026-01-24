@@ -21,9 +21,9 @@ INSERT OR IGNORE INTO schema_meta(key, value) VALUES('schema_version', '0');
 
 -- Backlog items (Epic/Feature/UserStory/Task/Bug, plus any process-defined types).
 CREATE TABLE IF NOT EXISTS items (
+  uid TEXT PRIMARY KEY,
   id TEXT NOT NULL,
   product TEXT NOT NULL,
-  uid TEXT,
   type TEXT NOT NULL,
   title TEXT NOT NULL,
   state TEXT,
@@ -37,37 +37,36 @@ CREATE TABLE IF NOT EXISTS items (
   source_path TEXT NOT NULL,
   content_sha256 TEXT,
   frontmatter_json TEXT NOT NULL,
-  PRIMARY KEY(product, id),
+  UNIQUE(product, id),
   UNIQUE(source_path)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_items_source_path ON items(source_path);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_items_product_id ON items(product, id);
 CREATE INDEX IF NOT EXISTS idx_items_product ON items(product);
 CREATE INDEX IF NOT EXISTS idx_items_parent_id ON items(parent_id);
 CREATE INDEX IF NOT EXISTS idx_items_state ON items(state);
 CREATE INDEX IF NOT EXISTS idx_items_type ON items(type);
-CREATE INDEX IF NOT EXISTS idx_items_product_id ON items(product, id);
+CREATE INDEX IF NOT EXISTS idx_items_id ON items(id);
 
 -- Tags: normalized for simple filtering/grouping.
 CREATE TABLE IF NOT EXISTS item_tags (
-  product TEXT NOT NULL,
-  item_id TEXT NOT NULL,
+  item_uid TEXT NOT NULL,
   tag TEXT NOT NULL,
-  PRIMARY KEY(product, item_id, tag),
-  FOREIGN KEY(product, item_id) REFERENCES items(product, id) ON DELETE CASCADE
+  PRIMARY KEY(item_uid, tag),
+  FOREIGN KEY(item_uid) REFERENCES items(uid) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_tags_tag ON item_tags(tag);
 
 -- Links: includes parent edges (optional) and link relations from frontmatter `links.*`.
 CREATE TABLE IF NOT EXISTS item_links (
-  product TEXT NOT NULL,
-  item_id TEXT NOT NULL,
+  item_uid TEXT NOT NULL,
   relation TEXT NOT NULL, -- e.g. relates, blocks, blocked_by, parent, external
   target TEXT NOT NULL,   -- item id or external key/url
   target_uid TEXT,        -- canonical UID when resolvable (nullable)
-  PRIMARY KEY(product, item_id, relation, target),
-  FOREIGN KEY(product, item_id) REFERENCES items(product, id) ON DELETE CASCADE
+  PRIMARY KEY(item_uid, relation, target),
+  FOREIGN KEY(item_uid) REFERENCES items(uid) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_links_relation ON item_links(relation);
@@ -77,11 +76,10 @@ CREATE INDEX IF NOT EXISTS idx_item_links_target_uid ON item_links(target_uid);
 -- Decisions/ADRs: we store decision references (links) from item frontmatter.
 -- The decision_ref can be a wiki-link target, filename, or URL.
 CREATE TABLE IF NOT EXISTS item_decisions (
-  product TEXT NOT NULL,
-  item_id TEXT NOT NULL,
+  item_uid TEXT NOT NULL,
   decision_ref TEXT NOT NULL,
-  PRIMARY KEY(product, item_id, decision_ref),
-  FOREIGN KEY(product, item_id) REFERENCES items(product, id) ON DELETE CASCADE
+  PRIMARY KEY(item_uid, decision_ref),
+  FOREIGN KEY(item_uid) REFERENCES items(uid) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_decisions_ref ON item_decisions(decision_ref);
@@ -89,16 +87,15 @@ CREATE INDEX IF NOT EXISTS idx_item_decisions_ref ON item_decisions(decision_ref
 -- Worklog entries: parsed from the markdown Worklog section.
 CREATE TABLE IF NOT EXISTS worklog_entries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  product TEXT NOT NULL,
-  item_id TEXT NOT NULL,
+  item_uid TEXT NOT NULL,
   occurred_at TEXT, -- best-effort timestamp (if parseable)
   agent TEXT,
   message TEXT NOT NULL,
   raw_line TEXT NOT NULL,
-  FOREIGN KEY(product, item_id) REFERENCES items(product, id) ON DELETE CASCADE
+  FOREIGN KEY(item_uid) REFERENCES items(uid) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_worklog_entries_item_id ON worklog_entries(item_id);
+CREATE INDEX IF NOT EXISTS idx_worklog_entries_item_uid ON worklog_entries(item_uid);
 CREATE INDEX IF NOT EXISTS idx_worklog_entries_occurred_at ON worklog_entries(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_worklog_entries_agent ON worklog_entries(agent);
 

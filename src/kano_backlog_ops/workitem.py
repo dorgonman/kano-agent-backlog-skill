@@ -420,6 +420,46 @@ def update_parent(
     )
 
 
+def _check_uid_uniqueness(uid: str, *, product_root: Path) -> bool:
+    """Check if a UID is unique across the product (SQLite index or file scan)."""
+    index_path = product_root / ".cache" / "index.sqlite3"
+    if index_path.exists():
+        try:
+            import sqlite3
+            conn = sqlite3.connect(index_path)
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM items WHERE uid = ?", (uid,))
+                count = cur.fetchone()[0]
+                return count == 0
+            finally:
+                conn.close()
+        except Exception:
+            pass
+    
+    items_root = product_root / "items"
+    if not items_root.exists():
+        return True
+    
+    try:
+        import frontmatter as py_frontmatter
+    except Exception:
+        return True
+    
+    for path in items_root.rglob("*.md"):
+        if path.name.endswith(".index.md") or path.name == "README.md":
+            continue
+        try:
+            post = py_frontmatter.load(path)
+            existing_uid = str(post.get("uid") or "").strip()
+            if existing_uid == uid:
+                return False
+        except Exception:
+            continue
+    
+    return True
+
+
 def create_item(
     item_type: ItemType,
     title: str,
@@ -507,6 +547,12 @@ def create_item(
     next_id = item_utils.find_next_number(items_root, prefix, type_code)
     item_id = f"{prefix}-{type_code}-{next_id:04d}"
     uid = str(uuid7())
+    
+    if not _check_uid_uniqueness(uid, product_root=backlog_root):
+        raise ValueError(
+            f"UID collision detected: {uid} already exists in product '{product}'. "
+            f"This is extremely rare with UUIDv7. Please retry the operation."
+        )
     
     # Calculate storage path
     bucket = item_utils.calculate_bucket(next_id)
