@@ -171,16 +171,16 @@
     <lastmod>2026-01-05T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0003-appendix_collision-report-cli-spec</loc>
-    <lastmod>2026-01-24T05:01:41.087Z</lastmod>
+    <lastmod>2026-01-24T05:08:31.518Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0003-appendix_id-resolver-spec</loc>
-    <lastmod>2026-01-24T05:01:41.260Z</lastmod>
+    <lastmod>2026-01-24T05:08:31.663Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0003-appendix_migration-plan-uid</loc>
-    <lastmod>2026-01-24T05:01:41.399Z</lastmod>
+    <lastmod>2026-01-24T05:08:31.835Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0003-appendix_ulid-vs-uuidv7-comparison</loc>
-    <lastmod>2026-01-24T05:01:41.554Z</lastmod>
+    <lastmod>2026-01-24T05:08:31.973Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0003_identifier-strategy-for-local-first-backlog</loc>
     <lastmod>2026-01-05T00:00:00.000Z</lastmod>
@@ -189,28 +189,28 @@
     <lastmod>2026-01-06T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0004_per-product-isolated-index-architecture</loc>
-    <lastmod>2026-01-24T05:01:42.024Z</lastmod>
+    <lastmod>2026-01-24T05:08:32.378Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0005_product-column-retention-rationale</loc>
-    <lastmod>2026-01-24T05:01:42.181Z</lastmod>
+    <lastmod>2026-01-24T05:08:32.533Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0005_skill-versioning-and-release-policy</loc>
     <lastmod>2026-01-06T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0006_multi-product-directory-structure</loc>
-    <lastmod>2026-01-24T05:01:42.498Z</lastmod>
+    <lastmod>2026-01-24T05:08:32.797Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0007_vcs-as-source-of-truth-derived-commit-data</loc>
-    <lastmod>2026-01-24T05:01:42.650Z</lastmod>
+    <lastmod>2026-01-24T05:08:32.927Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0008_sqlite-schema-migration-framework</loc>
-    <lastmod>2026-01-24T05:01:42.802Z</lastmod>
+    <lastmod>2026-01-24T05:08:33.067Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0009_local-first-embedding-search-architecture</loc>
     <lastmod>2026-01-07T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0010_project-babylon-global-scale-collaboration-vision</loc>
-    <lastmod>2026-01-24T05:01:43.122Z</lastmod>
+    <lastmod>2026-01-24T05:08:33.399Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0011_graph-assisted-retrieval-and-context-graph</loc>
     <lastmod>2026-01-09T00:00:00.000Z</lastmod>
@@ -234,10 +234,10 @@
     <lastmod>2026-01-12T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0016_per-product-isolated-index-architecture</loc>
-    <lastmod>2026-01-24T05:01:44.371Z</lastmod>
+    <lastmod>2026-01-24T05:08:34.538Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0017_product-column-retention-rationale</loc>
-    <lastmod>2026-01-24T05:01:44.543Z</lastmod>
+    <lastmod>2026-01-24T05:08:34.687Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0018_decision-for-kabsd-tsk-0056</loc>
     <lastmod>2026-01-10T00:00:00.000Z</lastmod>
@@ -249,10 +249,10 @@
     <lastmod>2026-01-10T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0021_per-product-isolated-index-architecture</loc>
-    <lastmod>2026-01-24T05:01:45.123Z</lastmod>
+    <lastmod>2026-01-24T05:08:35.276Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0022_product-column-retention-rationale</loc>
-    <lastmod>2026-01-24T05:01:45.273Z</lastmod>
+    <lastmod>2026-01-24T05:08:35.432Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0023_graph-assisted-retrieval-and-context-graph</loc>
     <lastmod>2026-01-09T00:00:00.000Z</lastmod>
@@ -270,19 +270,19 @@
     <lastmod>2026-01-10T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0028_per-product-isolated-index-architecture</loc>
-    <lastmod>2026-01-24T05:01:46.151Z</lastmod>
+    <lastmod>2026-01-24T05:08:36.411Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0029_product-column-retention-rationale</loc>
-    <lastmod>2026-01-24T05:01:46.297Z</lastmod>
+    <lastmod>2026-01-24T05:08:36.643Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0030_graph-assisted-retrieval-and-context-graph</loc>
     <lastmod>2026-01-09T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0031_per-product-isolated-index-architecture</loc>
-    <lastmod>2026-01-24T05:01:46.587Z</lastmod>
+    <lastmod>2026-01-24T05:08:36.908Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0032_per-product-isolated-index-architecture</loc>
-    <lastmod>2026-01-24T05:01:46.747Z</lastmod>
+    <lastmod>2026-01-24T05:08:37.053Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0033_decision-for-kabsd-tsk-0056</loc>
     <lastmod>2026-01-10T00:00:00.000Z</lastmod>
@@ -300,16 +300,16 @@
     <lastmod>2026-01-22T00:00:00.000Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_README</loc>
-    <lastmod>2026-01-24T05:01:47.643Z</lastmod>
+    <lastmod>2026-01-24T05:08:38.008Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo_docs_releases_0.0.1</loc>
-    <lastmod>2026-01-24T05:01:40.247Z</lastmod>
+    <lastmod>2026-01-24T05:08:30.804Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo_docs_releases_0.0.2</loc>
-    <lastmod>2026-01-24T05:01:40.412Z</lastmod>
+    <lastmod>2026-01-24T05:08:30.935Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/demo_docs_releases_PROCESS</loc>
-    <lastmod>2026-01-24T05:01:40.565Z</lastmod>
+    <lastmod>2026-01-24T05:08:31.063Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/</loc>
     <lastmod>2026-01-23T17:44:53.195Z</lastmod>
@@ -414,8 +414,8 @@
     <lastmod>2026-01-23T17:44:52.936Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/skill_docs_releases_0.0.1</loc>
-    <lastmod>2026-01-24T05:01:47.947Z</lastmod>
+    <lastmod>2026-01-24T05:08:41.166Z</lastmod>
   </url><url>
     <loc>https://dorgonman.github.io/kano-agent-backlog-skill/skill_docs_releases_0.0.2</loc>
-    <lastmod>2026-01-24T05:01:48.103Z</lastmod>
+    <lastmod>2026-01-24T05:08:41.302Z</lastmod>
   </url></urlset>

@@ -10,61 +10,61 @@
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/skill_docs_releases_0.0.2</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/skill_docs_releases_0.0.2</guid>
     <description>0.0.2 — Topics system hardening + embedding pipeline foundations This release focuses on two areas: Topic system enhancements to make multi-session, multi-agent context management ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:48 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:41 GMT</pubDate>
   </item><item>
     <title>skill_docs_releases_0.0.1</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/skill_docs_releases_0.0.1</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/skill_docs_releases_0.0.1</guid>
     <description>0.0.1 — Initial local-first backlog workflow (MVP) This is the first public cut of the Kano Agent Backlog demo workspace: a local-first, file-based backlog that supports agent collaboration ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:47 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:41 GMT</pubDate>
   </item><item>
     <title>demo__kano_backlog_products_kano-agent-backlog-skill_decisions_README</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_README</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_README</guid>
     <description>_kano/backlog/decisions Store ADRs here. Link ADR IDs in work items via the decisions field and append a Worklog entry when a decision affects scope or approach.</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:47 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:38 GMT</pubDate>
   </item><item>
     <title>Per-Product Isolated Index Architecture</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0032_per-product-isolated-index-architecture</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0032_per-product-isolated-index-architecture</guid>
     <description>Context In a multi-product monorepo environment, we needed to decide between two architectural approaches for the SQLite index: Platform-level shared index: All products write ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:46 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:37 GMT</pubDate>
   </item><item>
     <title>Per-Product Isolated Index Architecture</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0031_per-product-isolated-index-architecture</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0031_per-product-isolated-index-architecture</guid>
     <description>Context In a multi-product monorepo environment, we needed to decide between two architectural approaches for the SQLite index: Platform-level shared index: All products write ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:46 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:36 GMT</pubDate>
   </item><item>
     <title>Product Column Retention in Per-Product Indexes</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0029_product-column-retention-rationale</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0029_product-column-retention-rationale</guid>
     <description>Context When implementing per-product isolated indexes, a question arose: if each product owns its own SQLite database, why include a product column in the schema? Arguments for ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:46 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:36 GMT</pubDate>
   </item><item>
     <title>Per-Product Isolated Index Architecture</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0028_per-product-isolated-index-architecture</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0028_per-product-isolated-index-architecture</guid>
     <description>Context In a multi-product monorepo environment, we needed to decide between two architectural approaches for the SQLite index: Platform-level shared index: All products write ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:46 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:36 GMT</pubDate>
   </item><item>
     <title>Product Column Retention in Per-Product Indexes</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0022_product-column-retention-rationale</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0022_product-column-retention-rationale</guid>
     <description>Context When implementing per-product isolated indexes, a question arose: if each product owns its own SQLite database, why include a product column in the schema? Arguments for ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:45 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:35 GMT</pubDate>
   </item><item>
     <title>Per-Product Isolated Index Architecture</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0021_per-product-isolated-index-architecture</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0021_per-product-isolated-index-architecture</guid>
     <description>Context In a multi-product monorepo environment, we needed to decide between two architectural approaches for the SQLite index: Platform-level shared index: All products write ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:45 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:35 GMT</pubDate>
   </item><item>
     <title>Product Column Retention in Per-Product Indexes</title>
     <link>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0017_product-column-retention-rationale</link>
     <guid>https://dorgonman.github.io/kano-agent-backlog-skill/demo__kano_backlog_products_kano-agent-backlog-skill_decisions_ADR-0017_product-column-retention-rationale</guid>
     <description>Context When implementing per-product isolated indexes, a question arose: if each product owns its own SQLite database, why include a product column in the schema? Arguments for ...</description>
-    <pubDate>Sat, 24 Jan 2026 05:01:44 GMT</pubDate>
+    <pubDate>Sat, 24 Jan 2026 05:08:34 GMT</pubDate>
   </item>
     </channel>
   </rss>
