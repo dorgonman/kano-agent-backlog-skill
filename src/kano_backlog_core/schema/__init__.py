@@ -10,13 +10,17 @@ Available schemas:
 """
 
 from .loader import (
-    load_indexing_schema,
-    load_canonical_schema,
     get_schema_path,
+    load_canonical_schema,
+    load_indexing_schema,
+    load_schema,
+    load_schema_bundle,
 )
 
 __all__ = [
-    "load_indexing_schema",
-    "load_canonical_schema",
     "get_schema_path",
+    "load_canonical_schema",
+    "load_indexing_schema",
+    "load_schema",
+    "load_schema_bundle",
 ]

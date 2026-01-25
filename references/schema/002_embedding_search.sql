@@ -1,5 +1,15 @@
--- SQLite Schema for Global Embedding Database
--- Supports hybrid search (FTS5 keyword + FAISS semantic ANN)
+-- DEPRECATED (2026-01-25)
+--
+-- This schema predates the canonical schema defined by ADR-0012.
+-- Prefer the canonical schema (items/chunks/chunks_fts) at:
+--   skills/kano-agent-backlog-skill/src/kano_backlog_core/schema/canonical_schema.sql
+--
+-- If you need a dedicated embedding/search DB, treat it as an additive extension to
+-- the canonical schema (do not introduce a parallel "documents" core table).
+--
+-- Original header:
+--   SQLite Schema for Global Embedding Database
+--   Supports hybrid search (FTS5 keyword + FAISS semantic ANN)
 
 -- Documents table: high-level items (work items, ADRs, etc.)
 CREATE TABLE IF NOT EXISTS documents (

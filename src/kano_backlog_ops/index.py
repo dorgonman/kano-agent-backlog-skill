@@ -234,14 +234,37 @@ def get_index_status(
 
 def _scan_items(product_root: Path) -> Iterable[dict]:
     store = CanonicalStore(product_root)
-    for path in store.list_items():
+
+    # Build a map from display ID -> UID so we can resolve parent_uid.
+    # Canonical frontmatter stores `parent` as the display ID today.
+    paths = store.list_items()
+    loaded: list[tuple[Path, object, float]] = []
+    id_to_uid: dict[str, str] = {}
+
+    for path in paths:
         try:
             item = store.read(path)
         except Exception:
             continue
         stat = os.stat(path)
         mtime = stat.st_mtime
-        
+        loaded.append((path, item, mtime))
+        if getattr(item, "id", None) and getattr(item, "uid", None):
+            id_to_uid[str(item.id)] = str(item.uid)
+
+    backlog_root = product_root.parent.parent
+
+    for path, item, mtime in loaded:
+        parent_display = getattr(item, "parent", None)
+        parent_uid = id_to_uid.get(str(parent_display)) if parent_display else None
+
+        rel_path = path
+        try:
+            rel_path = path.relative_to(backlog_root)
+        except ValueError:
+            # Fallback: keep absolute if path is outside backlog_root.
+            rel_path = path
+
         frontmatter_dict = {
             "uid": item.uid,
             "id": item.id,
@@ -249,7 +272,8 @@ def _scan_items(product_root: Path) -> Iterable[dict]:
             "state": item.state.value,
             "title": item.title,
             "priority": item.priority,
-            "parent": item.parent,
+            "parent": parent_display,
+            "parent_uid": parent_uid,
             "owner": item.owner,
             "area": item.area,
             "iteration": item.iteration,
@@ -257,26 +281,25 @@ def _scan_items(product_root: Path) -> Iterable[dict]:
             "created": item.created,
             "updated": item.updated,
         }
-        
+
         yield {
             "uid": item.uid,
             "id": item.id,
             "type": item.type.value,
             "state": item.state.value,
             "title": item.title,
+            "path": str(rel_path).replace("\\", "/"),
+            "mtime": mtime,
+            "content_hash": None,
+            "frontmatter": json.dumps(frontmatter_dict, ensure_ascii=False),
+            "created": item.created,
+            "updated": item.updated,
             "priority": item.priority,
-            "parent_uid": item.parent,
+            "parent_uid": parent_uid,
             "owner": item.owner,
             "area": item.area,
             "iteration": item.iteration,
             "tags": json.dumps(item.tags or [], ensure_ascii=False),
-            "created": item.created,
-            "updated": item.updated,
-            "product": product_root.name,
-            "path": str(path),
-            "mtime": mtime,
-            "content_hash": None,
-            "frontmatter": json.dumps(frontmatter_dict, ensure_ascii=False),
         }
 
 
@@ -297,11 +320,11 @@ def _rebuild_sqlite_index(index_path: Path, product_root: Path) -> int:
             cur.executemany(
                 """
                 INSERT INTO items (
-                    uid, id, product, type, state, title, priority, parent_uid, owner, area,
-                    iteration, tags, created, updated, path, mtime, content_hash, frontmatter
+                    uid, id, type, state, title, path, mtime, content_hash, frontmatter,
+                    created, updated, priority, parent_uid, owner, area, iteration, tags
                 ) VALUES (
-                    :uid, :id, :product, :type, :state, :title, :priority, :parent_uid, :owner, :area,
-                    :iteration, :tags, :created, :updated, :path, :mtime, :content_hash, :frontmatter
+                    :uid, :id, :type, :state, :title, :path, :mtime, :content_hash, :frontmatter,
+                    :created, :updated, :priority, :parent_uid, :owner, :area, :iteration, :tags
                 )
                 """,
                 rows,

@@ -7,10 +7,42 @@ hardcoded in application code.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 
 _SCHEMA_DIR = Path(__file__).parent
+
+
+def load_schema(schema_name: str) -> str:
+    """Load a schema file by name.
+
+    Args:
+        schema_name: Filename under this directory.
+
+    Returns:
+        SQL string.
+    """
+    return get_schema_path(schema_name).read_text(encoding="utf-8")
+
+
+def load_schema_bundle(schema_names: Iterable[str]) -> str:
+    """Load and concatenate multiple schema files.
+
+    This is useful when a DB needs the canonical schema plus optional additive
+    extensions (e.g., workset_ tables) while keeping each schema in its own file.
+
+    Args:
+        schema_names: Sequence of filenames under this directory.
+
+    Returns:
+        Combined SQL string.
+    """
+    parts = []
+    for name in schema_names:
+        text = load_schema(name)
+        parts.append(f"\n\n-- === {name} ===\n\n")
+        parts.append(text)
+    return "".join(parts).lstrip()
 
 
 def load_indexing_schema() -> str:
@@ -22,8 +54,7 @@ def load_indexing_schema() -> str:
     Returns:
         SQL string for creating the index schema
     """
-    schema_path = _SCHEMA_DIR / "indexing_schema.sql"
-    return schema_path.read_text(encoding="utf-8")
+    return load_schema("indexing_schema.sql")
 
 
 def load_canonical_schema() -> str:
@@ -38,8 +69,7 @@ def load_canonical_schema() -> str:
     Returns:
         SQL string for creating the canonical schema
     """
-    schema_path = _SCHEMA_DIR / "canonical_schema.sql"
-    return schema_path.read_text(encoding="utf-8")
+    return load_schema("canonical_schema.sql")
 
 
 def get_schema_path(schema_name: str) -> Path:

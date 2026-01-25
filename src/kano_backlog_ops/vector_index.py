@@ -255,6 +255,8 @@ def build_vector_index(
     chunks_generated = 0
     chunks_indexed = 0
     
+    backlog_root_path = ctx.product_root.parent.parent
+
     current_batch = []
     BATCH_SIZE = 16
     
@@ -298,14 +300,21 @@ def build_vector_index(
             text_to_chunk = "\n\n".join(text_parts)
             
             raw_chunks = chunk_text_with_tokenizer(
-                source_id=item.id,
+                # Use stable UID as chunk namespace so chunk IDs remain stable even if
+                # the display ID changes.
+                source_id=item.uid,
                 text=text_to_chunk,
                 options=pc.chunking,
                 tokenizer=tokenizer,
                 model_name=pc.tokenizer.model
             )
 
-            for rc in raw_chunks:
+            try:
+                item_rel_path = Path(path).relative_to(backlog_root_path).as_posix()
+            except ValueError:
+                item_rel_path = str(path)
+
+            for chunk_index, rc in enumerate(raw_chunks):
                 max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(
                     pc.tokenizer.model
                 )
@@ -315,7 +324,14 @@ def build_vector_index(
                     chunk_id=rc.chunk_id,
                     text=budget_res.content,
                     metadata={
+                        # Keep display ID as the primary "source" for UX.
                         "source_id": item.id,
+                        # Canonical alignment fields.
+                        "item_uid": item.uid,
+                        "parent_uid": item.uid,
+                        "item_path": item_rel_path,
+                        "product": product,
+                        "chunk_index": chunk_index,
                         "start_char": rc.start_char,
                         "end_char": rc.end_char,
                         "trimmed": budget_res.trimmed,
