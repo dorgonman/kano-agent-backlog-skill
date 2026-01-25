@@ -297,6 +297,41 @@ Use Topics when:
 - Collaborating across agents/sessions with a shared context
 - Refactoring work that requires tracking multiple code locations
 
+#### Topic creation triggers (practical rubric)
+
+Topics are a shared, mid-term context buffer. Create a Topic when the context is likely
+to be reused, revisited, handed off, or split into multiple work items.
+
+Hard triggers (agent MAY create immediately):
+- 2+ backlog work items are expected (or likely to be created) to complete the effort.
+- Cross-module / multi-file work requires tracking multiple code locations or snippet refs.
+- Work is expected to span multiple sessions or be handed off across agents.
+- You are collecting durable evidence/materials (logs, snippet refs, pinned docs) that
+  should be preserved.
+
+Soft triggers (ask the human once before creating):
+- You have entered an explore -> adjust -> re-explore loop 2+ times (context is no longer
+  linear).
+- The thread references 3+ distinct information sources that should stay linked (files,
+  ADRs/docs, external links).
+- There are 2+ unresolved decisions (A vs B) that will change the downstream plan.
+- The user keeps appending new constraints/scope in the same thread (for example: 3+
+  follow-ups).
+
+Anti-triggers (prefer Workset or no Topic):
+- Single-item execution where a clear Task/Bug exists and you are ready to implement
+  (use a Workset).
+- Small, single-file change with low risk of handoff or revisiting.
+- Pure Q&A / explanation with no need to preserve artifacts or evidence.
+
+#### Post-create human notification (required)
+
+After creating a Topic, always print this (fill in values):
+- Topic: <topic-name>
+- Path: _kano/backlog/topics/<topic-name>/
+- Human brief: _kano/backlog/topics/<topic-name>/brief.md (and brief.generated.md)
+- List: python skills/kano-agent-backlog-skill/scripts/kano-backlog topic list --agent <agent-id>
+
 **Topic lifecycle**:
 1. **Create**: `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic create <topic-name> --agent <id>`
    - Creates `_kano/backlog/topics/<topic>/` with `manifest.json`, `brief.md`, `brief.generated.md`, `notes.md`, and `materials/` subdirectories

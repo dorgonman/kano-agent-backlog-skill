@@ -190,6 +190,56 @@ class SQLiteVectorBackend(VectorBackendAdapter):
         except sqlite3.OperationalError:
             pass
 
+    def list_chunk_ids(self) -> List[str]:
+        """Return all chunk_ids currently stored in this collection."""
+        self._ensure_connection()
+        assert self._conn is not None
+        cursor = self._conn.execute(
+            f"SELECT chunk_id FROM {self._collection}_chunks"
+        )
+        return [str(r[0]) for r in cursor.fetchall()]
+
+    def prune_to_chunk_ids(self, keep_chunk_ids: List[str]) -> None:
+        """Delete rows not present in keep_chunk_ids.
+
+        Intended for keeping the vector DB in sync with a canonical chunk contract.
+        """
+        self._ensure_connection()
+        assert self._conn is not None
+
+        cur = self._conn.cursor()
+        cur.execute("CREATE TEMP TABLE IF NOT EXISTS tmp_keep (chunk_id TEXT PRIMARY KEY)")
+        cur.execute("DELETE FROM tmp_keep")
+
+        if not keep_chunk_ids:
+            cur.execute(f"DELETE FROM {self._collection}_chunks")
+            try:
+                cur.execute(f"DELETE FROM {self._collection}_vec")
+            except sqlite3.OperationalError:
+                pass
+            self._conn.commit()
+            return
+
+        BATCH = 500
+        for i in range(0, len(keep_chunk_ids), BATCH):
+            batch = keep_chunk_ids[i : i + BATCH]
+            cur.executemany(
+                "INSERT OR IGNORE INTO tmp_keep(chunk_id) VALUES (?)",
+                [(str(cid),) for cid in batch],
+            )
+
+        cur.execute(
+            f"DELETE FROM {self._collection}_chunks WHERE chunk_id NOT IN (SELECT chunk_id FROM tmp_keep)"
+        )
+        try:
+            cur.execute(
+                f"DELETE FROM {self._collection}_vec WHERE chunk_id NOT IN (SELECT chunk_id FROM tmp_keep)"
+            )
+        except sqlite3.OperationalError:
+            pass
+
+        self._conn.commit()
+
     def delete(self, chunk_id: str) -> None:
         self._ensure_connection()
         assert self._conn is not None
@@ -216,15 +266,40 @@ class SQLiteVectorBackend(VectorBackendAdapter):
             )
 
         # MVP: brute-force scan for correctness. (vec0, if present, can be used later.)
-        cursor = self._conn.execute(
-            f"""
-            SELECT chunk_id, text, metadata_json, vector_json
-            FROM {self._collection}_chunks
-            """
+        #
+        # Supported filters (SQLite backend only):
+        # - filters={"chunk_ids": ["...", ...]} limits the scan to a candidate set.
+        chunk_ids = None
+        if filters and isinstance(filters, dict):
+            chunk_ids = filters.get("chunk_ids")
+
+        base_sql = (
+            f"SELECT chunk_id, text, metadata_json, vector_json FROM {self._collection}_chunks"
         )
+
+        cursor = None
+        chunk_id_set = None
+        if chunk_ids is not None:
+            chunk_ids_list = [str(x) for x in list(chunk_ids)]
+            if not chunk_ids_list:
+                return []
+
+            # SQLite has a variable limit (commonly 999). For large candidate sets,
+            # fall back to filtering in Python.
+            if len(chunk_ids_list) <= 900:
+                placeholders = ",".join(["?"] * len(chunk_ids_list))
+                sql = f"{base_sql} WHERE chunk_id IN ({placeholders})"
+                cursor = self._conn.execute(sql, tuple(chunk_ids_list))
+            else:
+                chunk_id_set = set(chunk_ids_list)
+                cursor = self._conn.execute(base_sql)
+        else:
+            cursor = self._conn.execute(base_sql)
 
         results: List[VectorQueryResult] = []
         for chunk_id, text, metadata_json, vector_json in cursor:
+            if chunk_id_set is not None and str(chunk_id) not in chunk_id_set:
+                continue
             try:
                 stored_vector = json.loads(vector_json)
             except (json.JSONDecodeError, TypeError):

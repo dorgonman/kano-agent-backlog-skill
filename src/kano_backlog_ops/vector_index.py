@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Optional, List
 import time
 import logging
+import hashlib
+import sqlite3
+import os
 
 from kano_backlog_core.config import ConfigLoader
 from kano_backlog_core.canonical import CanonicalStore
@@ -13,9 +16,49 @@ from kano_backlog_core.tokenizer import resolve_model_max_tokens, resolve_tokeni
 from kano_backlog_core.token_budget import enforce_token_budget, budget_chunks
 from kano_backlog_core.embedding import resolve_embedder
 from kano_backlog_core.vector import VectorChunk, get_backend
+from kano_backlog_core.vector.sqlite_backend import SQLiteVectorBackend
 from kano_backlog_core.pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_sqlite_vector_db_path(
+    *,
+    vec_path: Path,
+    collection: str,
+    embedding_space_id: Optional[str],
+) -> Path:
+    if embedding_space_id:
+        digest = hashlib.sha256(embedding_space_id.encode("utf-8")).hexdigest()[:12]
+        base_dir = vec_path.parent if vec_path.suffix else vec_path
+        return base_dir / f"{collection}.{digest}.sqlite3"
+
+    return vec_path if vec_path.suffix else vec_path / f"{collection}.sqlite3"
+
+
+def _chunks_db_is_stale(*, product_root: Path, chunks_db_path: Path) -> bool:
+    if not chunks_db_path.exists():
+        return True
+
+    try:
+        db_mtime = chunks_db_path.stat().st_mtime
+    except OSError:
+        return True
+
+    items_root = product_root / "items"
+    if not items_root.exists():
+        return False
+
+    latest_item_mtime = db_mtime
+    for p in items_root.rglob("*.md"):
+        try:
+            m = p.stat().st_mtime
+        except OSError:
+            continue
+        if m > latest_item_mtime:
+            latest_item_mtime = m
+
+    return latest_item_mtime > db_mtime
 
 @dataclass
 class VectorIndexResult:
@@ -246,21 +289,50 @@ def build_vector_index(
         "collection": pc.vector.collection,
         "embedding_space_id": embedding_space_id,
     }
+    # If requested, clear the vector DB for this embedding space.
+    sqlite_vec_db_path: Optional[Path] = None
+    existing_chunk_ids: set[str] = set()
+
+    if pc.vector.backend == "sqlite":
+        sqlite_vec_db_path = _resolve_sqlite_vector_db_path(
+            vec_path=vec_path,
+            collection=pc.vector.collection,
+            embedding_space_id=embedding_space_id,
+        )
+
+        if force and sqlite_vec_db_path.exists():
+            sqlite_vec_db_path.unlink()
+
     backend = get_backend(vec_cfg)
     backend.prepare(schema={}, dims=pc.embedding.dimension, metric=pc.vector.metric)
-    
-    # Process items
-    store = CanonicalStore(ctx.product_root)
+
+    if isinstance(backend, SQLiteVectorBackend) and (not force):
+        try:
+            existing_chunk_ids = set(backend.list_chunk_ids())
+        except Exception:
+            existing_chunk_ids = set()
+
+    # Ensure canonical chunks DB exists and is fresh (single chunk contract).
+    chunks_db_path = ctx.product_root / ".cache" / "chunks.sqlite3"
+    if force or _chunks_db_is_stale(product_root=ctx.product_root, chunks_db_path=chunks_db_path):
+        from kano_backlog_ops.chunks_db import build_chunks_db
+
+        build_chunks_db(product=product, backlog_root=ctx.backlog_root, force=True)
+
+    if not chunks_db_path.exists():
+        raise FileNotFoundError(f"Chunks DB not found: {chunks_db_path}")
+
+    max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)
+
     items_processed = 0
     chunks_generated = 0
     chunks_indexed = 0
-    
-    backlog_root_path = ctx.product_root.parent.parent
+    seen_parent_uids: set[str] = set()
 
-    current_batch = []
+    current_batch: list[VectorChunk] = []
     BATCH_SIZE = 16
-    
-    def flush_batch():
+
+    def flush_batch() -> None:
         nonlocal current_batch, chunks_indexed
         if not current_batch:
             return
@@ -273,87 +345,81 @@ def build_vector_index(
             chunks_indexed += 1
         current_batch = []
 
-    for path in store.list_items():
-        try:
-            item = store.read(path)
-            items_processed += 1
-            
-            # Construct text from item fields
-            text_parts = [item.title]
-            
-            # Add structured content sections
-            if item.context:
-                text_parts.append(f"Context: {item.context}")
-            if item.goal:
-                text_parts.append(f"Goal: {item.goal}")
-            if item.approach:
-                text_parts.append(f"Approach: {item.approach}")
-            if item.acceptance_criteria:
-                text_parts.append(f"Acceptance Criteria: {item.acceptance_criteria}")
-            if item.risks:
-                text_parts.append(f"Risks: {item.risks}")
-            if item.non_goals:
-                text_parts.append(f"Non-Goals: {item.non_goals}")
-            if item.alternatives:
-                text_parts.append(f"Alternatives: {item.alternatives}")
-            
-            text_to_chunk = "\n\n".join(text_parts)
-            
-            raw_chunks = chunk_text_with_tokenizer(
-                # Use stable UID as chunk namespace so chunk IDs remain stable even if
-                # the display ID changes.
-                source_id=item.uid,
-                text=text_to_chunk,
-                options=pc.chunking,
-                tokenizer=tokenizer,
-                model_name=pc.tokenizer.model
+    conn = sqlite3.connect(str(chunks_db_path))
+    try:
+        conn.execute("PRAGMA foreign_keys = ON")
+        cursor = conn.execute(
+            """
+            SELECT
+                c.chunk_id,
+                c.content,
+                c.section,
+                c.chunk_index,
+                c.parent_uid,
+                i.id,
+                i.path
+            FROM chunks c
+            JOIN items i ON i.uid = c.parent_uid
+            ORDER BY i.id, c.chunk_index
+            """
+        )
+
+        canonical_chunk_ids: set[str] = set()
+
+        for chunk_id, content, section, chunk_index, parent_uid, item_id, item_path in cursor:
+            chunk_id_str = str(chunk_id)
+            canonical_chunk_ids.add(chunk_id_str)
+
+            if parent_uid not in seen_parent_uids:
+                seen_parent_uids.add(parent_uid)
+                items_processed += 1
+
+            if not isinstance(content, str) or not content.strip():
+                continue
+
+            # Skip re-embedding when the vector DB already has this chunk_id.
+            if existing_chunk_ids and chunk_id_str in existing_chunk_ids:
+                continue
+
+            budget_res = enforce_token_budget(content, tokenizer, max_tokens=max_tokens)
+
+            vc = VectorChunk(
+                chunk_id=chunk_id_str,
+                text=budget_res.content,
+                metadata={
+                    # Primary UX fields
+                    "source_id": str(item_id),
+                    "product": product,
+                    # Canonical alignment fields
+                    "parent_uid": str(parent_uid),
+                    "item_uid": str(parent_uid),
+                    "item_path": str(item_path),
+                    "section": str(section) if section is not None else None,
+                    "chunk_index": int(chunk_index),
+                    # Budget telemetry
+                    "trimmed": budget_res.trimmed,
+                    "token_count": budget_res.token_count.count,
+                    "token_count_method": budget_res.token_count.method,
+                    "tokenizer_id": budget_res.token_count.tokenizer_id,
+                    "is_exact": budget_res.token_count.is_exact,
+                    "target_budget": budget_res.target_budget,
+                    "safety_margin": budget_res.safety_margin,
+                    "max_tokens": max_tokens,
+                },
             )
 
-            try:
-                item_rel_path = Path(path).relative_to(backlog_root_path).as_posix()
-            except ValueError:
-                item_rel_path = str(path)
+            current_batch.append(vc)
+            chunks_generated += 1
+            if len(current_batch) >= BATCH_SIZE:
+                flush_batch()
 
-            for chunk_index, rc in enumerate(raw_chunks):
-                max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(
-                    pc.tokenizer.model
-                )
-                budget_res = enforce_token_budget(rc.text, tokenizer, max_tokens=max_tokens)
+        # Prune stale chunk rows (only for sqlite backend) so chunk_ids track the
+        # canonical chunk contract.
+        if isinstance(backend, SQLiteVectorBackend):
+            backend.prune_to_chunk_ids(list(canonical_chunk_ids))
 
-                vc = VectorChunk(
-                    chunk_id=rc.chunk_id,
-                    text=budget_res.content,
-                    metadata={
-                        # Keep display ID as the primary "source" for UX.
-                        "source_id": item.id,
-                        # Canonical alignment fields.
-                        "item_uid": item.uid,
-                        "parent_uid": item.uid,
-                        "item_path": item_rel_path,
-                        "product": product,
-                        "chunk_index": chunk_index,
-                        "start_char": rc.start_char,
-                        "end_char": rc.end_char,
-                        "trimmed": budget_res.trimmed,
-                        "token_count": budget_res.token_count.count,
-                        "token_count_method": budget_res.token_count.method,
-                        "tokenizer_id": budget_res.token_count.tokenizer_id,
-                        "is_exact": budget_res.token_count.is_exact,
-                        "target_budget": budget_res.target_budget,
-                        "safety_margin": budget_res.safety_margin,
-                        "max_tokens": max_tokens,
-                    },
-                )
-
-                current_batch.append(vc)
-                chunks_generated += 1
-
-                if len(current_batch) >= BATCH_SIZE:
-                    flush_batch()
-                    
-        except Exception as e:
-            logger.warning(f"Failed to process {path}: {e}")
-            continue
+    finally:
+        conn.close()
 
     flush_batch()
     backend.persist()

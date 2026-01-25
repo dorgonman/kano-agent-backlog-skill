@@ -19,6 +19,39 @@ While worksets are per-item execution caches, topics group multiple items and do
 - Pinned documents provide additional context beyond items
 - `manifest.json` is primarily **machine-oriented** (for agents/tools); capture **human decision material** in `notes.md` (and/or pinned docs) so `brief.md` can remain deterministic
 
+## When to Create a Topic (Rubric)
+
+Topics are a shared, mid-term context buffer. Create a Topic when the context is likely
+to be reused, revisited, handed off, or split into multiple work items.
+
+Hard triggers (agent MAY create immediately):
+- 2+ backlog work items are expected (or likely to be created) to complete the effort.
+- Cross-module / multi-file work requires tracking multiple code locations or snippet refs.
+- Work is expected to span multiple sessions or be handed off across agents.
+- You are collecting durable evidence/materials (logs, snippet refs, pinned docs) that
+  should be preserved.
+
+Soft triggers (ask the human once before creating):
+- You have entered an explore -> adjust -> re-explore loop 2+ times (context is no longer
+  linear).
+- The thread references 3+ distinct information sources that should stay linked (files,
+  ADRs/docs, external links).
+- There are 2+ unresolved decisions (A vs B) that will change the downstream plan.
+- The user keeps appending new constraints/scope in the same thread (for example: 3+
+  follow-ups).
+
+Anti-triggers (prefer Workset or no Topic):
+- Single-item execution where a clear Task/Bug exists and you are ready to implement
+  (use a Workset).
+- Small, single-file change with low risk of handoff or revisiting.
+- Pure Q&A / explanation with no need to preserve artifacts or evidence.
+
+After creating a Topic, always tell the human where to find it:
+- Topic: <topic-name>
+- Path: _kano/backlog/topics/<topic-name>/
+- Human brief: _kano/backlog/topics/<topic-name>/brief.md (and brief.generated.md)
+- List: kano-backlog topic list --agent <agent-id>
+
 ## Directory Layout
 
 Topics live in the backlog tree so the deterministic brief can be shared:
