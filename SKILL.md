@@ -215,6 +215,7 @@ Within each backlog root:
 - View patterns: `references/views.md`
 - Obsidian Bases (plugin-free): `references/bases.md`
 - Context Graph + Graph-assisted retrieval: `references/context_graph.md`
+- Multi-corpus hybrid search: `docs/multi-corpus-search.md`
 
 If the backlog structure is missing, propose creation and wait for user approval before writing files.
 
@@ -228,8 +229,8 @@ If the backlog structure is missing, propose creation and wait for user approval
 - **Discovery phase**: Exploring unfamiliar codebase or backlog areas
 
 **Commands (planned unified interface):**
-- Backlog corpus: `python skills/kano-agent-backlog-skill/scripts/kano-backlog search hybrid "query" --corpus backlog --product <product> --k 10`
-- Repo corpus: `python skills/kano-agent-backlog-skill/scripts/kano-backlog search hybrid "query" --corpus repo --k 10 --fts-candidates 200`
+- Backlog corpus: `python skills/kano-agent-backlog-skill/scripts/kano-backlog search hybrid "text" --corpus backlog --product <product> --k 10`
+- Repo corpus: `python skills/kano-agent-backlog-skill/scripts/kano-backlog search hybrid "text" --corpus repo --k 10 --fts-candidates 200`
 
 **Note**: Current implementation uses `search hybrid` (backlog only) and `chunks search-repo-hybrid` (repo). The `--corpus` parameter approach provides better extensibility for future corpus types (logs, metrics, external-docs, etc.).
 
@@ -257,8 +258,8 @@ If the backlog structure is missing, propose creation and wait for user approval
 - **When to rebuild**: After major refactoring, file moves, or when search results seem outdated
 
 **Current CLI (temporary):**
-- Backlog: `kano-backlog search hybrid "query" --product <product> --k 10`
-- Repo: `kano-backlog chunks search-repo-hybrid "query" --k 10 --fts-candidates 200`
+- Backlog: `kano-backlog search hybrid "text" --product <product> --k 10`
+- Repo: `kano-backlog chunks search-repo-hybrid "text" --k 10 --fts-candidates 200`
 
 **Planned unified interface:**
 - Both: `kano-backlog search {query|hybrid} "text" --corpus {backlog|repo} [options]`
