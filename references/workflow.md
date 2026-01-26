@@ -11,8 +11,31 @@
 
 ## B) Ready gate
 
-- Move to Ready only after required sections are complete.
-- No code changes until the item is Ready.
+The Ready gate ensures planning is complete before execution begins.
+
+**Required Fields** (Task/Bug):
+- **Context**: Why are we doing this? What is the background?
+- **Goal**: What is the specific objective?
+- **Approach**: How will we solve it? (Steps, design choices)
+- **Acceptance Criteria**: How do we know it's done? (Checklist)
+- **Risks / Dependencies**: What could go wrong? What do we need first?
+
+**Validation Points**:
+1. **State Transition**: Moving to `InProgress` triggers automatic validation.
+   - Checks item's required fields.
+   - Checks parent's required fields (if parent is not null).
+   - Blocks transition if validation fails.
+   - Use `--force` to bypass (emergency only; records warning).
+2. **Item Creation**: Creating a child item triggers parent validation.
+   - Checks if parent is Ready.
+   - Blocks creation if parent is not Ready.
+   - Use `--force` to bypass.
+3. **Manual Check**: `item check-ready <ID>` validates item and parent.
+
+**Best Practices**:
+- **Parent: null**: Allowed for standalone tasks, top-level Epics, or hotfixes where hierarchy is overkill.
+- **--force**: Use sparingly for hotfixes or when requirements are truly emergent.
+- **Validation**: Always run `check-ready` before starting work.
 
 ## C) Execution
 

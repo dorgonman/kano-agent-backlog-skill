@@ -98,3 +98,200 @@ def query_chunks(
         typer.echo(f"- chunk_id: {r.chunk_id}")
         typer.echo(f"- text: {preview}")
         typer.echo()
+
+
+@app.command("build-repo")
+def build_repo_chunks(
+    project_root: Optional[Path] = typer.Option(None, "--project-root", help="Project root (auto-detected if not specified)"),
+    backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
+    include: Optional[list[str]] = typer.Option(None, "--include", help="Include patterns (e.g., *.md *.py)"),
+    exclude: Optional[list[str]] = typer.Option(None, "--exclude", help="Exclude patterns (e.g., .git node_modules)"),
+    force: bool = typer.Option(False, "--force", help="Force rebuild if DB exists"),
+    output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+):
+    """Build repo corpus chunks DB (docs + code)."""
+    ensure_core_on_path()
+
+    from kano_backlog_ops.repo_chunks_db import build_repo_chunks_db
+
+    result = build_repo_chunks_db(
+        project_root=project_root,
+        backlog_root=backlog_root,
+        include_patterns=include,
+        exclude_patterns=exclude,
+        force=force,
+    )
+
+    if output_format == "json":
+        payload = {
+            "db_path": str(result.db_path),
+            "files_indexed": result.files_indexed,
+            "chunks_indexed": result.chunks_indexed,
+            "build_time_ms": result.build_time_ms,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+        return
+
+    typer.echo(f"# Build Repo Chunks DB")
+    typer.echo(f"- db_path: {result.db_path}")
+    typer.echo(f"- files_indexed: {result.files_indexed}")
+    typer.echo(f"- chunks_indexed: {result.chunks_indexed}")
+    typer.echo(f"- build_time_ms: {result.build_time_ms:.2f}")
+
+
+@app.command("query-repo")
+def query_repo_chunks(
+    query: str = typer.Argument(..., help="FTS query (SQLite MATCH syntax)"),
+    project_root: Optional[Path] = typer.Option(None, "--project-root", help="Project root (auto-detected if not specified)"),
+    backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
+    k: int = typer.Option(10, "--k", help="Number of results to return"),
+    output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+):
+    """Keyword search over repo corpus chunks_fts."""
+    ensure_core_on_path()
+
+    from kano_backlog_ops.repo_chunks_db import query_repo_chunks_fts
+
+    results = query_repo_chunks_fts(
+        project_root=project_root,
+        backlog_root=backlog_root,
+        query=query,
+        k=k,
+    )
+
+    if output_format == "json":
+        payload = {
+            "query": query,
+            "k": k,
+            "results": [
+                {
+                    "file_path": r.file_path,
+                    "file_id": r.file_id,
+                    "chunk_id": r.chunk_id,
+                    "parent_uid": r.parent_uid,
+                    "section": r.section,
+                    "content": r.content,
+                    "score": r.score,
+                }
+                for r in results
+            ],
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+        return
+
+    typer.echo(f"# Repo Chunks Search")
+    typer.echo(f"- query: {query}")
+    typer.echo(f"- k: {k}")
+    typer.echo(f"- results_count: {len(results)}")
+    typer.echo()
+
+    for i, r in enumerate(results, 1):
+        preview = r.content[:200] + ("..." if len(r.content) > 200 else "")
+        typer.echo(f"## Result {i} (score: {r.score:.4f})")
+        typer.echo(f"- file: {r.file_path}")
+        typer.echo(f"- file_id: {r.file_id}")
+        typer.echo(f"- section: {r.section or 'unknown'}")
+        typer.echo(f"- chunk_id: {r.chunk_id}")
+        typer.echo(f"- text: {preview}")
+        typer.echo()
+
+
+@app.command("build-repo-vectors")
+def build_repo_vectors(
+    project_root: Optional[Path] = typer.Option(None, "--project-root", help="Project root (auto-detected if not specified)"),
+    backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
+    force: bool = typer.Option(False, "--force", help="Force rebuild (clear existing vectors)"),
+    output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+):
+    """Build vector index for repo corpus."""
+    ensure_core_on_path()
+
+    from kano_backlog_ops.repo_vector_index import build_repo_vector_index
+
+    result = build_repo_vector_index(
+        project_root=project_root,
+        backlog_root=backlog_root,
+        force=force,
+    )
+
+    if output_format == "json":
+        payload = {
+            "files_processed": result.files_processed,
+            "chunks_generated": result.chunks_generated,
+            "chunks_indexed": result.chunks_indexed,
+            "chunks_skipped": result.chunks_skipped,
+            "chunks_pruned": result.chunks_pruned,
+            "duration_ms": result.duration_ms,
+            "backend_type": result.backend_type,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+        return
+
+    typer.echo(f"# Build Repo Vector Index")
+    typer.echo(f"- files_processed: {result.files_processed}")
+    typer.echo(f"- chunks_generated: {result.chunks_generated}")
+    typer.echo(f"- chunks_indexed: {result.chunks_indexed}")
+    typer.echo(f"- chunks_skipped: {result.chunks_skipped}")
+    typer.echo(f"- chunks_pruned: {result.chunks_pruned}")
+    typer.echo(f"- duration_ms: {result.duration_ms:.2f}")
+    typer.echo(f"- backend_type: {result.backend_type}")
+
+
+@app.command("search-repo-hybrid")
+def search_repo_hybrid_cmd(
+    query: str = typer.Argument(..., help="Search query"),
+    project_root: Optional[Path] = typer.Option(None, "--project-root", help="Project root (auto-detected if not specified)"),
+    backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
+    k: int = typer.Option(10, "--k", help="Number of results to return"),
+    fts_candidates: int = typer.Option(200, "--fts-candidates", help="Number of FTS candidates for reranking"),
+    output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+):
+    """Hybrid search over repo corpus (FTS + vector rerank)."""
+    ensure_core_on_path()
+
+    from kano_backlog_ops.repo_vector_query import search_repo_hybrid
+
+    results = search_repo_hybrid(
+        query_text=query,
+        project_root=project_root,
+        backlog_root=backlog_root,
+        k=k,
+        fts_candidates=fts_candidates,
+    )
+
+    if output_format == "json":
+        payload = {
+            "query": query,
+            "k": k,
+            "fts_candidates": fts_candidates,
+            "results": [
+                {
+                    "chunk_id": r.chunk_id,
+                    "file_path": r.file_path,
+                    "file_id": r.file_id,
+                    "section": r.section,
+                    "snippet": r.snippet,
+                    "vector_score": r.vector_score,
+                    "bm25_score": r.bm25_score,
+                }
+                for r in results
+            ],
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=True, indent=2))
+        return
+
+    typer.echo(f"# Repo Hybrid Search")
+    typer.echo(f"- query: {query}")
+    typer.echo(f"- k: {k}")
+    typer.echo(f"- fts_candidates: {fts_candidates}")
+    typer.echo(f"- results_count: {len(results)}")
+    typer.echo()
+
+    for i, r in enumerate(results, 1):
+        typer.echo(f"## Result {i} (vector: {r.vector_score:.4f}, bm25: {r.bm25_score:.4f})")
+        typer.echo(f"- file: {r.file_path}")
+        typer.echo(f"- file_id: {r.file_id}")
+        typer.echo(f"- section: {r.section or 'unknown'}")
+        typer.echo(f"- chunk_id: {r.chunk_id}")
+        typer.echo(f"- snippet: {r.snippet}")
+        typer.echo()

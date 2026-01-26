@@ -49,9 +49,14 @@ def read(
         typer.echo(f"ID: {item.id}\nTitle: {item.title}\nState: {item.state.value}\nOwner: {item.owner}")
 
 
-@app.command()
-def validate(
+@app.command(name="check-ready")
+def check_ready(
     item_id: str = typer.Argument(..., help="Display ID, e.g., KABSD-TSK-0001"),
+    check_parent: bool = typer.Option(
+        True,
+        "--check-parent/--no-check-parent",
+        help="Check parent item recursively",
+    ),
     product: str | None = typer.Option(None, "--product", help="Product name"),
     backlog_root_override: Path | None = typer.Option(
         None,
@@ -63,27 +68,61 @@ def validate(
     """Validate a work item against the Ready gate."""
     ensure_core_on_path()
     from kano_backlog_core.canonical import CanonicalStore
+    from kano_backlog_core.validation import is_ready
 
     product_root = resolve_product_root(product, backlog_root_override=backlog_root_override)
     store = CanonicalStore(product_root)
     item_path = find_item_path_by_id(store.items_root, item_id)
     item = store.read(item_path)
 
-    ready_fields = ["context", "goal", "approach", "acceptance_criteria", "risks"]
-    gaps = [field for field in ready_fields if not getattr(item, field, None)]
-    is_ready = len(gaps) == 0
+    ready, gaps = is_ready(item)
+    
+    parent_ready = True
+    parent_gaps = []
+    parent_id = None
+    
+    if check_parent and item.parent:
+        try:
+            parent_path = find_item_path_by_id(store.items_root, item.parent)
+            parent_item = store.read(parent_path)
+            parent_id = parent_item.id
+            parent_ready, parent_gaps = is_ready(parent_item)
+        except Exception:
+            parent_ready = False
+            parent_gaps = ["Parent not found or unreadable"]
+
+    overall_ready = ready and (not item.parent or not check_parent or parent_ready)
 
     if output_format == "json":
-        result = {"id": item.id, "is_ready": is_ready, "gaps": gaps}
+        result = {
+            "id": item.id,
+            "is_ready": overall_ready,
+            "self": {"ready": ready, "missing": gaps},
+            "parent": {
+                "id": parent_id,
+                "ready": parent_ready,
+                "missing": parent_gaps
+            } if check_parent and item.parent else None
+        }
         typer.echo(json.dumps(result, ensure_ascii=True))
     else:
-        if is_ready:
+        if overall_ready:
             typer.echo(f"OK: {item.id} is READY")
         else:
             typer.echo(f"❌ {item.id} is NOT READY")
-            typer.echo("Missing fields:")
-            for field in gaps:
-                typer.echo(f"  - {field}")
+            
+            if not ready:
+                typer.echo(f"  Missing fields in {item.id}:")
+                for field in gaps:
+                    typer.echo(f"    - {field}")
+            
+            if check_parent and item.parent and not parent_ready:
+                typer.echo(f"  Parent {item.parent} is NOT READY:")
+                for field in parent_gaps:
+                    typer.echo(f"    - {field}")
+            
+        if not overall_ready:
+            raise typer.Exit(1)
 
 
 @app.command("add-decision")
@@ -142,6 +181,7 @@ def _run_create_command(
     agent: str,
     product: str | None,
     backlog_root_override: Path | None,
+    force: bool,
     output_format: str,
 ) -> None:
     """Invoke the ops-layer create implementation and handle formatting."""
@@ -177,6 +217,7 @@ def _run_create_command(
             iteration=iteration,
             tags=tag_list,
             backlog_root=product_root,
+            force=force,
         )
     except FileNotFoundError as exc:
         typer.echo(f"❌ {exc}", err=True)
@@ -218,6 +259,7 @@ def create(
         "--backlog-root-override",
         help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
     ),
+    force: bool = typer.Option(False, "--force", help="Bypass parent Ready gate check"),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
     """Create a new backlog work item (ops-backed implementation)."""
@@ -232,6 +274,7 @@ def create(
         agent=agent,
         product=product,
         backlog_root_override=backlog_root_override,
+        force=force,
         output_format=output_format,
     )
 
@@ -307,6 +350,7 @@ def update_state_command(
     ),
     sync_parent: bool = typer.Option(True, "--sync-parent/--no-sync-parent", help="Sync parent state forward"),
     refresh_dashboards: bool = typer.Option(True, "--refresh/--no-refresh", help="Refresh dashboards after update"),
+    force: bool = typer.Option(False, "--force", help="Bypass Ready gate validation"),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
     """Update work item state via the ops layer."""
@@ -349,6 +393,7 @@ def update_state_command(
             sync_parent=sync_parent,
             refresh_dashboards=refresh_dashboards,
             backlog_root=product_root,
+            force=force,
         )
     except RuntimeError as exc:
         typer.echo(f"❌ {exc}", err=True)

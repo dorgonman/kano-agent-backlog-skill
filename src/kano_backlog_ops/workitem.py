@@ -21,6 +21,7 @@ if sys.version_info >= (3, 12):
 else:
     from uuid6 import uuid7  # type: ignore
 from kano_backlog_core.config import BacklogContext, ConfigLoader
+from kano_backlog_core.validation import is_ready
 
 from . import item_utils
 from . import item_templates
@@ -473,6 +474,7 @@ def create_item(
     iteration: Optional[str] = None,
     backlog_root: Optional[Path] = None,
     worklog_message: str = "Created item",
+    force: bool = False,
 ) -> CreateItemResult:
     """
     Create a new work item (direct implementation).
@@ -489,6 +491,7 @@ def create_item(
         iteration: Sprint/iteration
         backlog_root: Root path for backlog
         worklog_message: Initial worklog message
+        force: Bypass parent Ready gate check if True
 
     Returns:
         CreateItemResult with created item details
@@ -533,6 +536,25 @@ def create_item(
             prefix = product_cfg.get("prefix") or item_utils.derive_prefix(product)
         else:
             prefix = item_utils.derive_prefix(product)
+            
+    if parent and parent.lower() != "null" and not force:
+        try:
+            parent_item = get_item(parent, backlog_root=backlog_root)
+            ready, gaps = is_ready(parent_item)
+            if not ready:
+                raise ValueError(
+                    f"Parent item {parent_item.id} is not Ready. "
+                    f"Missing fields: {', '.join(gaps)}. "
+                    f"Parent must be Ready before adding children, or use --force to bypass."
+                )
+        except FileNotFoundError:
+            raise ValueError(f"Parent item {parent} not found. Cannot verify Ready gate.")
+            
+    if parent and parent.lower() != "null":
+        if force:
+            worklog_message += " [Parent Ready gate bypassed via --force]"
+        else:
+            worklog_message += " [Parent Ready gate validated]"
     
     # Generate IDs
     type_code_map = {
@@ -543,8 +565,21 @@ def create_item(
         ItemType.BUG: "BUG",
     }
     type_code = type_code_map[item_type]
-    items_root = backlog_root / "items"
-    next_id = item_utils.find_next_number(items_root, prefix, type_code)
+    
+    # Try DB generation first (atomic)
+    next_id = 0
+    cache_dir = backlog_root / ".cache"
+    db_path = cache_dir / "chunks.sqlite3"
+    
+    try:
+        next_id = item_utils.get_next_id_from_db(db_path, prefix, type_code)
+    except Exception as e:
+        # Fallback to filesystem scan if DB not ready or locked
+        # This warning is expected during bootstrap/migration
+        print(f"Warning: DB ID generation failed ({e}). Falling back to filesystem scan.")
+        items_root = backlog_root / "items"
+        next_id = item_utils.find_next_number(items_root, prefix, type_code)
+        
     item_id = f"{prefix}-{type_code}-{next_id:04d}"
     uid = str(uuid7())
     
@@ -754,6 +789,7 @@ def update_state(
     sync_parent: bool = True,
     refresh_dashboards: bool = True,
     backlog_root: Optional[Path] = None,
+    force: bool = False,
 ) -> UpdateStateResult:
     """
     Update work item state (direct implementation).
@@ -767,13 +803,14 @@ def update_state(
         sync_parent: Whether to sync parent state forward
         refresh_dashboards: Whether to refresh dashboards after update
         backlog_root: Root path for backlog
+        force: Bypass Ready gate validation if True
 
     Returns:
         UpdateStateResult with transition details
 
     Raises:
         FileNotFoundError: If item not found
-        ValueError: If state transition is invalid
+        ValueError: If state transition is invalid or Ready gate check fails
     """
     target_root, item_path = _resolve_item_path(
         item_ref, product=product, backlog_root=backlog_root
@@ -781,6 +818,34 @@ def update_state(
 
     item = get_item(str(item_path), backlog_root=target_root)
     old_state = item.state
+
+    # Ready Gate Validation
+    # Only check when moving to InProgress (starting work)
+    if new_state == ItemState.IN_PROGRESS and not force:
+        # 1. Check item itself
+        ready, gaps = is_ready(item)
+        if not ready:
+            raise ValueError(
+                f"Item {item.id} is not Ready. "
+                f"Missing fields: {', '.join(gaps)}. "
+                f"Fill required fields or use --force to bypass."
+            )
+        
+        # 2. Check parent (if exists)
+        if item.parent:
+            try:
+                parent_item = get_item(item.parent, backlog_root=target_root)
+                parent_ready, parent_gaps = is_ready(parent_item)
+                if not parent_ready:
+                    raise ValueError(
+                        f"Parent item {parent_item.id} is not Ready. "
+                        f"Missing fields: {', '.join(parent_gaps)}. "
+                        f"Parent must be Ready before child can start, or use --force to bypass."
+                    )
+            except FileNotFoundError:
+                # If parent ID exists but file not found, warn but don't block? 
+                # Or block because context is broken? Let's block to be safe.
+                raise ValueError(f"Parent item {item.parent} not found. Cannot verify Ready gate.")
 
     owner_to_set = None
     if new_state == ItemState.IN_PROGRESS:
@@ -790,7 +855,14 @@ def update_state(
         elif current_owner == agent:
             owner_to_set = agent
 
-    worklog_message = message or f"State -> {new_state.value}."
+    validation_note = ""
+    if new_state == ItemState.IN_PROGRESS:
+        if force:
+            validation_note = " [Ready gate bypassed via --force]"
+        else:
+            validation_note = " [Ready gate validated]"
+
+    worklog_message = (message or f"State -> {new_state.value}.") + validation_note
     _update_item_file_state(
         item_path,
         new_state=new_state,

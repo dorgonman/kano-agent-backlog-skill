@@ -119,4 +119,42 @@ def backlog(
 			typer.echo(f"⚠️  Demo seeding failed: {exc}", err=True)
 
 
+@app.command("sync-sequences")
+def sync_sequences(
+	*,
+	product: str = typer.Option(..., "--product", help="Product folder name (e.g., kano-agent-backlog-skill)"),
+	backlog_root: Path | None = typer.Option(
+		None,
+		"--backlog-root",
+		help="Path to _kano/backlog (auto-detected or created near the repo root)",
+	),
+	dry_run: bool = typer.Option(
+		False,
+		"--dry-run",
+		help="Print planned updates without modifying DB",
+	),
+) -> None:
+	"""Initialize DB ID sequences from existing files."""
+	ensure_core_on_path()
+	from kano_backlog_ops.item_utils import sync_id_sequences
+
+	try:
+		result = sync_id_sequences(
+			product=product,
+			backlog_root=backlog_root,
+			dry_run=dry_run,
+		)
+	except Exception as exc:
+		typer.echo(f"❌ Error: {exc}", err=True)
+		raise typer.Exit(1)
+
+	if dry_run:
+		typer.echo("Dry run - would update:")
+	else:
+		typer.echo("Updated sequences:")
+
+	for type_code, next_num in result.items():
+		typer.echo(f"  {type_code}: {next_num}")
+
+
 

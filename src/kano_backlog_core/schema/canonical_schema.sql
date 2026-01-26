@@ -27,6 +27,14 @@ INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', '0');
 -- Core Entities
 -- ============================================
 
+-- ID Sequences: Atomic ID generation
+CREATE TABLE IF NOT EXISTS id_sequences (
+  prefix TEXT NOT NULL,
+  type_code TEXT NOT NULL,
+  next_number INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (prefix, type_code)
+);
+
 -- Items: Work items (Epic/Feature/Story/Task/Bug) and ADRs
 CREATE TABLE IF NOT EXISTS items (
   uid TEXT PRIMARY KEY,              -- UUIDv7 (globally unique, from frontmatter)

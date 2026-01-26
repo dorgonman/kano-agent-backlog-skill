@@ -8,10 +8,120 @@ Per ADR-0013, this is a utility module for ops layer functions.
 from __future__ import annotations
 
 import re
+import sqlite3
 import unicodedata
 from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime
+
+
+from kano_backlog_core.config import ConfigLoader
+from kano_backlog_core.models import ItemType
+
+
+def sync_id_sequences(
+    product: str,
+    backlog_root: Optional[Path] = None,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Initialize DB ID sequences from existing files.
+    
+    Scans filesystem for max ID per type and updates DB sequence table.
+    
+    Args:
+        product: Product name
+        backlog_root: Optional backlog root override
+        dry_run: If True, don't modify DB
+        
+    Returns:
+        Dict of {type_code: next_number}
+    """
+    if backlog_root is None:
+        ctx = ConfigLoader.from_path(Path.cwd(), product=product)
+        backlog_root = ctx.product_root
+    else:
+        backlog_root = backlog_root / "products" / product
+        
+    # Load prefix
+    config_data = ConfigLoader.load_product_config(backlog_root)
+    product_cfg = config_data.get("product") if isinstance(config_data, dict) else {}
+    prefix = product_cfg.get("prefix") if isinstance(product_cfg, dict) else derive_prefix(product)
+    
+    items_root = backlog_root / "items"
+    cache_dir = backlog_root / ".cache"
+    db_path = cache_dir / "chunks.sqlite3"
+    
+    type_code_map = {
+        ItemType.EPIC: "EPIC",
+        ItemType.FEATURE: "FTR",
+        ItemType.USER_STORY: "USR",
+        ItemType.TASK: "TSK",
+        ItemType.BUG: "BUG",
+    }
+    
+    results = {}
+    
+    # Ensure DB exists if not dry run
+    if not dry_run and not db_path.exists():
+        # Ideally we should init the DB here, but for now we assume chunks build handles it
+        # or we create a minimal one.
+        # For simplicity, we just create the table if connection succeeds
+        pass
+        
+    conn = None
+    if not dry_run:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS id_sequences (
+                prefix TEXT NOT NULL,
+                type_code TEXT NOT NULL,
+                next_number INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (prefix, type_code)
+            )
+        """)
+    
+    try:
+        for item_type, type_code in type_code_map.items():
+            # Find max from files
+            next_from_files = find_next_number(items_root, prefix, type_code)
+            
+            # Find current from DB (if exists)
+            next_from_db = 1
+            if conn:
+                try:
+                    cursor = conn.execute(
+                        "SELECT next_number FROM id_sequences WHERE prefix = ? AND type_code = ?",
+                        (prefix, type_code)
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        next_from_db = row[0]
+                except sqlite3.Error:
+                    pass
+            
+            # Target is max of both (to be safe)
+            target_next = max(next_from_files, next_from_db)
+            
+            results[type_code] = target_next
+            
+            if not dry_run and conn:
+                conn.execute("""
+                    INSERT INTO id_sequences (prefix, type_code, next_number)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(prefix, type_code) DO UPDATE SET
+                        next_number = excluded.next_number
+                    WHERE excluded.next_number > id_sequences.next_number
+                """, (prefix, type_code, target_next))
+        
+        if conn:
+            conn.commit()
+            
+    finally:
+        if conn:
+            conn.close()
+            
+    return results
 
 
 def slugify(text: str, max_len: int = 80) -> str:
@@ -81,6 +191,54 @@ def find_next_number(
             max_num = number
     
     return max_num + 1
+
+
+def get_next_id_from_db(
+    db_path: Path,
+    prefix: str,
+    type_code: str,
+) -> int:
+    """Get the next ID number atomically from SQLite sequence table.
+    
+    Uses `id_sequences` table in the provided DB path.
+    If table doesn't exist, raises sqlite3.OperationalError.
+    
+    Args:
+        db_path: Path to SQLite database (e.g. chunks.sqlite3)
+        prefix: Project prefix
+        type_code: Item type code
+        
+    Returns:
+        Next available number (1-based)
+        
+    Raises:
+        sqlite3.Error: If DB error occurs
+        FileNotFoundError: If DB file doesn't exist
+    """
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+        
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        
+        query = """
+            INSERT INTO id_sequences (prefix, type_code, next_number)
+            VALUES (?, ?, 1)
+            ON CONFLICT(prefix, type_code) DO UPDATE SET
+                next_number = next_number + 1
+        """
+        conn.execute(query, (prefix, type_code))
+        
+        cursor = conn.execute(
+            "SELECT next_number FROM id_sequences WHERE prefix = ? AND type_code = ?", 
+            (prefix, type_code)
+        )
+        row = cursor.fetchone()
+        
+        if not row:
+            raise sqlite3.IntegrityError("Failed to retrieve sequence number after update")
+            
+        return row[0]
 
 
 def _extract_id_from_filename(filename: str) -> Optional[str]:

@@ -62,7 +62,11 @@ Use this skill to:
   - Suggested Worklog template:
     - `Bug origin: last_good=<sha|tag>, first_bad=<sha|tag>, suspect=<sha> (reason: blame <path>:<line>), evidence=<git log/blame/bisect|other>`
 - State ownership: the agent decides when to move items to InProgress or Done; humans observe and can add context.
-- State semantics: Proposed = needs discovery/confirmation; Planned = approved but not started; Ready gate applies before start.
+- State semantics:
+  - Proposed: needs discovery/confirmation.
+  - Planned: approved but not started.
+  - Ready gate applies before InProgress: Context, Goal, Approach, Acceptance Criteria, Risks must be filled.
+  - InProgress: active work; strict Ready gate enforcement unless `--force` is used.
 - Hierarchy is in frontmatter links, not folder nesting; avoid moving files to reflect scope changes.
 - Filenames stay stable; use ASCII slugs.
 - Never include secrets in backlog files or logs.
@@ -239,7 +243,7 @@ Guideline: do not paste large `--help` output into chat; inspect it locally and 
 - Daily workflow:
   - `python skills/kano-agent-backlog-skill/scripts/kano-backlog workitem create --type task --title "..." --agent <id> --product <name>`
   - `python skills/kano-agent-backlog-skill/scripts/kano-backlog workitem set-ready <item-id> --context "..." --goal "..." --approach "..." --acceptance-criteria "..." --risks "..." --product <name>`
-  - `python skills/kano-agent-backlog-skill/scripts/kano-backlog workitem validate <item-id> --product <name>`
+  - `python skills/kano-agent-backlog-skill/scripts/kano-backlog workitem check-ready <item-id> --product <name>`
   - `python skills/kano-agent-backlog-skill/scripts/kano-backlog workitem update-state <item-ref> --state InProgress --agent <id> --message "..." --product <name>`
   - `python skills/kano-agent-backlog-skill/scripts/kano-backlog workitem attach-artifact <item-id> --path <file> --shared --agent <id> --product <name> [--note "..."]`
   - `python skills/kano-agent-backlog-skill/scripts/kano-backlog view refresh --agent <id> --product <name>`
