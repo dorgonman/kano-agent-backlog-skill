@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""
+Post-commit hook: Check for orphan commits and suggest creating backlog items.
+
+This hook runs after each commit and checks if:
+1. The commit has a backlog item ID
+2. If not, suggests creating one based on commit content
+
+Install:
+    git config core.hooksPath .githooks
+"""
+
+import subprocess
+import sys
+import re
+from pathlib import Path
+
+def get_last_commit_info():
+    """Get information about the last commit."""
+    try:
+        # Get commit message
+        msg = subprocess.check_output(
+            ['git', 'log', '-1', '--pretty=%B'],
+            encoding='utf-8'
+        ).strip()
+        
+        # Get commit hash
+        commit_hash = subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'],
+            encoding='utf-8'
+        ).strip()[:7]
+        
+        # Get changed files
+        files = subprocess.check_output(
+            ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'],
+            encoding='utf-8'
+        ).strip().split('\n')
+        
+        return {
+            'message': msg,
+            'hash': commit_hash,
+            'files': files
+        }
+    except subprocess.CalledProcessError:
+        return None
+
+def has_ticket_id(message):
+    """Check if commit message contains a backlog item ID."""
+    return bool(re.search(r'KABSD-(FTR|TSK|BUG|USR|EPC)-\d+', message))
+
+def is_trivial_commit(message):
+    """Check if this is a trivial commit that doesn't need a ticket."""
+    trivial_patterns = [
+        r'^(docs|chore|style|typo|format):',
+        r'^Merge ',
+        r'^Revert ',
+        r'^WIP:',
+    ]
+    return any(re.match(pattern, message, re.IGNORECASE) for pattern in trivial_patterns)
+
+def suggest_ticket_type(commit_info):
+    """Suggest ticket type based on commit content."""
+    msg = commit_info['message'].lower()
+    files = commit_info['files']
+    
+    # Check for feature indicators
+    if any(keyword in msg for keyword in ['feat', 'feature', 'add', 'implement', 'new']):
+        return 'task', 'Feature implementation'
+    
+    # Check for bug indicators
+    if any(keyword in msg for keyword in ['fix', 'bug', 'issue', 'error', 'crash']):
+        return 'bug', 'Bug fix'
+    
+    # Check for refactor indicators
+    if any(keyword in msg for keyword in ['refactor', 'cleanup', 'improve', 'optimize']):
+        return 'task', 'Code refactoring'
+    
+    # Check for test indicators
+    if any(keyword in msg for keyword in ['test', 'spec']) or any('test' in f for f in files):
+        return 'task', 'Test implementation'
+    
+    # Default
+    return 'task', 'Code change'
+
+def main():
+    commit_info = get_last_commit_info()
+    if not commit_info:
+        return 0
+    
+    # Check if commit has ticket ID
+    if has_ticket_id(commit_info['message']):
+        return 0
+    
+    # Check if trivial commit
+    if is_trivial_commit(commit_info['message']):
+        return 0
+    
+    # Suggest creating a ticket
+    ticket_type, description = suggest_ticket_type(commit_info)
+    
+    print()
+    print("=" * 70)
+    print("📋 BACKLOG REMINDER: No ticket ID found in commit")
+    print("=" * 70)
+    print()
+    print(f"Commit: {commit_info['hash']}")
+    print(f"Message: {commit_info['message'].split(chr(10))[0][:60]}...")
+    print(f"Files changed: {len(commit_info['files'])}")
+    print()
+    print(f"💡 Suggested action: Create a {ticket_type.upper()} item")
+    print()
+    print("Quick commands:")
+    print()
+    print(f"  # Create {ticket_type}")
+    print(f"  kano-backlog item create \\")
+    print(f"    --type {ticket_type} \\")
+    print(f"    --title \"{description}\" \\")
+    print(f"    --product kano-agent-backlog-skill \\")
+    print(f"    --agent $(whoami)")
+    print()
+    print("  # Or add to existing ticket")
+    print("  kano-backlog worklog append KABSD-TSK-XXXX \\")
+    print(f"    --message \"Commit {commit_info['hash']}: ...\" \\")
+    print("    --agent $(whoami) \\")
+    print("    --product kano-agent-backlog-skill")
+    print()
+    print("  # Then amend commit message")
+    print("  git commit --amend -m \"KABSD-TSK-XXXX: your message\"")
+    print()
+    print("=" * 70)
+    print()
+    
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())

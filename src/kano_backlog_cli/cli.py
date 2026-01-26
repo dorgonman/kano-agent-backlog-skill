@@ -41,6 +41,7 @@ from .commands import embedding as embedding_cmd  # noqa: E402
 from .commands import chunks as chunks_cmd  # noqa: E402
 from .commands import search as search_cmd  # noqa: E402
 from .commands import tokenizer_cmd as tokenizer_cmd  # noqa: E402
+from .commands import orphan as orphan_cmd  # noqa: E402
 from .commands.doctor import doctor as doctor_fn  # noqa: E402
 
 app.add_typer(admin_cmd.app, name="admin", help="Administrative and setup commands")
@@ -55,10 +56,11 @@ app.add_typer(topic_cmd.app, name="topic", help="Topic context operations")
 app.add_typer(config_cmd.app, name="config", help="Config inspection and validation")
 app.add_typer(changelog_cmd.app, name="changelog", help="Changelog generation from backlog")
 app.add_typer(benchmark_cmd.app, name="benchmark", help="Deterministic benchmark harness")
-app.add_typer(embedding_cmd.app, name="embedding", help="Embedding pipeline operations")
+app.add_typer(embedding_cmd.app, name="embedding", help="Embedeline operations")
 app.add_typer(chunks_cmd.app, name="chunks", help="Canonical chunks DB (FTS5)")
 app.add_typer(search_cmd.app, name="search", help="Vector similarity search")
 app.add_typer(tokenizer_cmd.app, name="tokenizer", help="Tokenizer adapter configuration, testing, and diagnostics")
+app.add_typer(orphan_cmd.app, name="orphan", help="Check for commits without backlog item IDs")
 # Nest index, demo, persona, and sandbox under admin group
 admin_cmd.app.add_typer(index_cmd.app, name="index", help="Index operations")
 admin_cmd.app.add_typer(demo_cmd.app, name="demo", help="Demo data operations")

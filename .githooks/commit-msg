@@ -1,0 +1,45 @@
+#!/bin/bash
+# Git commit-msg hook: Remind to create/update backlog items
+# Install: git config core.hooksPath .githooks
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Check if commit message has a backlog item ID
+if echo "$COMMIT_MSG" | grep -qE "KABSD-(FTR|TSK|BUG|USR|EPC)-[0-9]+"; then
+    # Has ticket ID - all good
+    exit 0
+fi
+
+# Check if this is a trivial commit (docs, typo, formatting)
+if echo "$COMMIT_MSG" | grep -qiE "^(docs|chore|style|typo|format):"; then
+    # Trivial commit - no ticket needed
+    exit 0
+fi
+
+# Check if this is a merge/revert commit
+if echo "$COMMIT_MSG" | grep -qE "^(Merge|Revert)"; then
+    exit 0
+fi
+
+# No ticket ID found - show warning
+echo ""
+echo "⚠️  WARNING: No backlog item ID found in commit message"
+echo ""
+echo "   This commit appears to be a feature/fix/refactor without a ticket."
+echo ""
+echo "   Recommended actions:"
+echo "   1. Create a backlog item:"
+echo "      kano-backlog item create --type task --title \"...\""
+echo ""
+echo "   2. Update commit message to include ticket ID:"
+echo "      git commit --amend -m \"KABSD-TSK-XXXX: your message\""
+echo ""
+echo "   3. Or add to existing ticket's worklog:"
+echo "      kano-backlog worklog append KABSD-TSK-XXXX --message \"...\""
+echo ""
+echo "   (This is a warning only - commit will proceed)"
+echo ""
+
+# Allow commit to proceed (warning only)
+exit 0
