@@ -3,10 +3,24 @@ name: kano-agent-backlog-skill
 description: Local-first backlog workflow. Use when planning work, creating/updating backlog items, writing ADRs, enforcing Ready gate, generating views, or maintaining derived indexes (SQLite/FTS/embeddings).
 metadata:
   short-description: Local backlog system
+  version: pre-alpha
+  stability: experimental
 
 ---
 
 # Kano Agent Backlog Skill (local-first)
+
+## Pre-alpha Status
+
+**This skill is in pre-alpha (experimental) stage:**
+- Breaking changes are expected and frequent
+- No backward compatibility guarantees
+- CLI commands, config schema, and file formats may change without notice
+- When implementing new features or refactoring, **do not add backward compatibility layers**
+- Simply replace old implementations with new ones
+- Update documentation to reflect current state only
+
+**For agents:** When you see deprecated patterns or inconsistent interfaces, refactor them directly. Do not preserve old code paths "for compatibility."
 
 ## Scope
 
@@ -264,6 +278,8 @@ If the backlog structure is missing, propose creation and wait for user approval
 **Planned unified interface:**
 - Both: `kano-backlog search {query|hybrid} "text" --corpus {backlog|repo} [options]`
 - Future: `--corpus all` for cross-corpus search
+
+**Implementation note (pre-alpha):** When implementing the unified interface, directly replace the current commands. No backward compatibility needed - simply remove `chunks search-repo-hybrid` and update `search hybrid` to accept `--corpus` parameter.
 
 **See also**: `docs/multi-corpus-search.md` for detailed hybrid search documentation.
 
