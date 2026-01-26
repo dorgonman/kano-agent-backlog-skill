@@ -9,13 +9,20 @@ from .types import EmbeddingResult, EmbeddingTelemetry
 
 
 class OpenAIEmbeddingAdapter(EmbeddingAdapter):
-    """Embedding adapter for OpenAI models."""
+    """Embedding adapter for OpenAI models and OpenAI-compatible APIs (vLLM, etc)."""
 
-    def __init__(self, model_name: str = "text-embedding-3-small", api_key: Optional[str] = None):
+    def __init__(
+        self, 
+        model_name: str = "text-embedding-3-small", 
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        dimension: Optional[int] = None
+    ):
         super().__init__(model_name)
         self._api_key = api_key
+        self._base_url = base_url
         self._client = None
-        self._dimension = 1536 if "small" in model_name else 3072
+        self._dimension = dimension or (1536 if "small" in model_name else 3072)
         
     def _ensure_client(self):
         if self._client is not None:
@@ -26,10 +33,15 @@ class OpenAIEmbeddingAdapter(EmbeddingAdapter):
         except ImportError:
             raise ImportError("openai package required for OpenAI embeddings. Install with: pip install openai")
         
+        kwargs = {}
         if self._api_key:
-            self._client = openai.OpenAI(api_key=self._api_key)
+            kwargs["api_key"] = self._api_key
+        if self._base_url:
+            kwargs["base_url"] = self._base_url
+            
+        if kwargs:
+            self._client = openai.OpenAI(**kwargs)
         else:
-            # Will use OPENAI_API_KEY environment variable
             self._client = openai.OpenAI()
     
     def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:

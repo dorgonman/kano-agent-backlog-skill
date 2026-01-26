@@ -18,10 +18,17 @@ def resolve_embedder(config: Dict[str, Any]) -> EmbeddingAdapter:
 
     if provider == "openai":
         api_key = config.get("api_key")
+        base_url = config.get("base_url")
+        dimension = config.get("dimension")
         try:
             from .openai_adapter import OpenAIEmbeddingAdapter
 
-            return OpenAIEmbeddingAdapter(model_name=model_name, api_key=api_key)
+            return OpenAIEmbeddingAdapter(
+                model_name=model_name, 
+                api_key=api_key,
+                base_url=base_url,
+                dimension=dimension
+            )
         except ImportError as e:
             raise ValueError(f"OpenAI adapter not available: {e}")
 
