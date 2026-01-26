@@ -218,6 +218,44 @@ Within each backlog root:
 
 If the backlog structure is missing, propose creation and wait for user approval before writing files.
 
+## Search Strategy: When to Use Semantic Search vs File Tools
+
+### Use semantic/hybrid search when:
+- **Conceptual queries**: "Find items about authentication strategy" (concept-based, not exact string)
+- **Cross-file patterns**: "Where do we handle token expiration?" (logic scattered across multiple files)
+- **Historical context**: "What decisions were made about embedding models?" (ADRs + items + topics)
+- **Fuzzy matching**: "error handling for database connections" (various phrasings, synonyms)
+- **Discovery phase**: Exploring unfamiliar codebase or backlog areas
+
+**Commands:**
+- Backlog corpus: `python skills/kano-agent-backlog-skill/scripts/kano-backlog search hybrid "query" --product <product> --k 10`
+- Repo corpus: `python skills/kano-agent-backlog-skill/scripts/kano-backlog chunks search-repo-hybrid "query" --k 10 --fts-candidates 200`
+
+### Use find/grep/glob when:
+- **Exact strings**: Error messages, function names, class names, specific identifiers
+- **File patterns**: "Find all test files", "List all .toml configs", "Locate README files"
+- **Quick lookups**: Known file paths or specific code locations
+- **Structural search**: AST-based patterns (use ast_grep for code structure)
+- **No index available**: Indexes not yet built or known to be stale
+
+**Tools:**
+- Glob: File pattern matching (`*.py`, `**/*.md`, `test_*.py`)
+- Grep: Content search with regex (`class.*Adapter`, `def test_`)
+- AST Grep: Code structure patterns (`function $NAME($$$)`, `class $CLASS`)
+
+### Hybrid approach (recommended):
+1. **Start with semantic search** for discovery and conceptual understanding
+2. **Verify with grep/glob** to find exact locations and confirm results
+3. **Rebuild indexes when stale**: Use `--force` flag if results seem outdated
+
+### Index maintenance:
+- **Build backlog index**: `python skills/kano-agent-backlog-skill/scripts/kano-backlog embedding build --product <product> --force`
+- **Build repo index**: `python skills/kano-agent-backlog-skill/scripts/kano-backlog chunks build-repo-vectors --force`
+- **Check status**: `ls -lh _kano/backlog/products/<product>/.cache/chunks.sqlite3 .cache/repo_chunks.sqlite3`
+- **When to rebuild**: After major refactoring, file moves, or when search results seem outdated
+
+**See also**: `docs/multi-corpus-search.md` for detailed hybrid search documentation.
+
 ## Kano CLI entrypoints (current surface)
 
 `scripts/` exposes a single executable: `scripts/kano-backlog`. The CLI is intentionally organized as nested command groups so agents can discover operations via `--help` on-demand (instead of hard-coding the full command surface into this skill).
