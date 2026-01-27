@@ -4,7 +4,28 @@ All notable changes to `kano-agent-backlog-skill` will be documented in this fil
 
 This project uses Git tags as releases: `vX.Y.Z`.
 
-## [Unreleased]
+## [0.0.3] - 2026-01-27
+
+### Added
+- Binary vector storage format using `struct.pack` for 74.5% space savings (836 MB → 213 MB for 26k vectors)
+- Human-readable `.meta.json` metadata files for vector indexes (no SQL queries needed to understand database configuration)
+- vLLM and OpenAI-compatible API support via `base_url` parameter (enables self-hosted embedding services)
+- Orphan commit detection: Git hooks and CLI commands to remind developers to create backlog items
+- `kano-backlog orphan check` command to analyze commits for missing ticket IDs
+- `kano-backlog orphan suggest` command to recommend ticket types based on commit content
+- Git hooks with soft reminders (`.githooks/commit-msg`, `.githooks/post-commit`)
+- WIP commit exemption in git hooks
+- Config option to disable reminders: `git config kano.backlog.reminders false`
+
+### Changed
+- Vector storage defaults to binary format for space efficiency
+- Git hook reminders use gentle tone (💡 Reminder) instead of warnings
+- Orphan detection respects trivial commits (docs, chore, style, WIP)
+
+### Documentation
+- Complete vLLM setup guide with model comparisons and configuration examples
+- Orphan commit detection guide explaining the soft reminder philosophy
+- Git hooks README with usage examples and customization options
 
 ## [0.0.2] - 2026-01-19
 
