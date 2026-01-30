@@ -83,10 +83,11 @@ def build_index(
     t0 = time.perf_counter()
     backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
 
-    def _product_index_path(prod_root: Path) -> Path:
-        cache_dir = prod_root / ".cache"
+    def _product_index_path(prod_root: Path, product_name: str) -> Path:
+        repo_root = backlog_root_path.parent.parent
+        cache_dir = repo_root / ".kano" / "cache" / "backlog"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        return cache_dir / "index.sqlite3"
+        return cache_dir / f"index.backlog.{product_name}.v1.db"
 
     items_indexed_total = 0
     links_indexed_total = 0  # links not indexed in MVP
@@ -96,7 +97,7 @@ def build_index(
         prod_root = (backlog_root_path / "products" / product)
         if not prod_root.exists():
             raise FileNotFoundError(f"Product backlog not found: {prod_root}")
-        index_path = _product_index_path(prod_root)
+        index_path = _product_index_path(prod_root, product)
         if index_path.exists() and not force:
             raise FileExistsError(f"Index already exists: {index_path} (use force to rebuild)")
         items_indexed = _rebuild_sqlite_index(index_path, prod_root)
@@ -109,7 +110,7 @@ def build_index(
             raise FileNotFoundError(f"No products directory at {products_root}")
         built_any = False
         for prod_dir in sorted(p for p in products_root.iterdir() if p.is_dir()):
-            index_path = _product_index_path(prod_dir)
+            index_path = _product_index_path(prod_dir, prod_dir.name)
             if index_path.exists() and not force:
                 # Skip existing unless forced
                 continue
@@ -182,12 +183,13 @@ def get_index_status(
     """
     backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
 
-    def _product_index_path(prod_root: Path) -> Path:
-        cache_dir = prod_root / ".cache"
-        return cache_dir / "index.sqlite3"
+    def _product_index_path(prod_root: Path, product_name: str) -> Path:
+        repo_root = backlog_root_path.parent.parent
+        cache_dir = repo_root / ".kano" / "cache" / "backlog"
+        return cache_dir / f"index.backlog.{product_name}.v1.db"
 
-    def _get_index_info(prod_name: str, prod_root: Path) -> IndexInfo:
-        index_path = _product_index_path(prod_root)
+    def _get_index_info(prod_name: str, prod_root: Path, product_name: str) -> IndexInfo:
+        index_path = _product_index_path(prod_root, product_name)
         exists = index_path.exists()
         
         info = IndexInfo(
@@ -220,14 +222,14 @@ def get_index_status(
         prod_root = (backlog_root_path / "products" / product)
         if not prod_root.exists():
             raise FileNotFoundError(f"Product backlog not found: {prod_root}")
-        indexes.append(_get_index_info(product, prod_root))
+        indexes.append(_get_index_info(product, prod_root, product))
     else:
         # Check all products
         products_root = backlog_root_path / "products"
         if not products_root.exists():
             raise FileNotFoundError(f"No products directory at {products_root}")
         for prod_dir in sorted(p for p in products_root.iterdir() if p.is_dir()):
-            indexes.append(_get_index_info(prod_dir.name, prod_dir))
+            indexes.append(_get_index_info(prod_dir.name, prod_dir, prod_dir.name))
 
     return IndexStatusResult(indexes=indexes)
 

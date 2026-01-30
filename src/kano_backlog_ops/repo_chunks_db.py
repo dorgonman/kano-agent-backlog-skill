@@ -222,9 +222,9 @@ def build_repo_chunks_db(
     if exclude_patterns is None:
         exclude_patterns = DEFAULT_EXCLUDE_PATTERNS
     
-    cache_dir = project_root / ".cache"
+    cache_dir = project_root / ".kano" / "cache" / "backlog"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    db_path = cache_dir / "repo_chunks.sqlite3"
+    db_path = cache_dir / "chunks.repo.v1.db"
     
     if db_path.exists() and not force:
         raise FileExistsError(f"Repo chunks DB already exists: {db_path} (use force to rebuild)")
@@ -436,7 +436,7 @@ def query_repo_chunks_fts(
     else:
         project_root = project_root.resolve()
     
-    db_path = project_root / ".cache" / "repo_chunks.sqlite3"
+    db_path = project_root / ".kano" / "cache" / "backlog" / "chunks.repo.v1.db"
     if not db_path.exists():
         raise FileNotFoundError(f"Repo chunks DB not found: {db_path} (run build first)")
     

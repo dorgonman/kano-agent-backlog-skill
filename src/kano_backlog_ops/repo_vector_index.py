@@ -25,12 +25,39 @@ def _resolve_sqlite_vector_db_path(
     collection: str,
     embedding_space_id: Optional[str],
 ) -> Path:
+    """Resolve vector DB path with new naming convention.
+    
+    New format: vectors.{corpus}.{embedding-short}.{hash-8}.db
+    Example: vectors.repo.noop-d1536.af3c739f.db
+    """
     if embedding_space_id:
-        digest = hashlib.sha256(embedding_space_id.encode("utf-8")).hexdigest()[:12]
+        # Parse embedding_space_id to extract components
+        # Format: "corpus:repo|emb:noop:noop-embedding:d1536|tok:...|chunk:...|metric:cosine"
+        components = {}
+        for segment in embedding_space_id.split('|'):
+            key, value = segment.split(':', 1)
+            components[key] = value
+        
+        # Extract corpus (e.g., "repo")
+        corpus = components.get('corpus', 'unknown')
+        
+        # Extract embedding short name (e.g., "noop-d1536")
+        emb_parts = components.get('emb', '').split(':')
+        if len(emb_parts) >= 3:
+            emb_type = emb_parts[0]  # "noop"
+            emb_dim = emb_parts[-1]   # "d1536"
+            emb_short = f"{emb_type}-{emb_dim}"
+        else:
+            emb_short = "unknown"
+        
+        # Generate hash (first 8 chars)
+        digest = hashlib.sha256(embedding_space_id.encode("utf-8")).hexdigest()[:8]
+        
+        # New naming: vectors.{corpus}.{embedding-short}.{hash-8}.db
         base_dir = vec_path.parent if vec_path.suffix else vec_path
-        return base_dir / f"{collection}.{digest}.sqlite3"
+        return base_dir / f"vectors.{corpus}.{emb_short}.{digest}.db"
 
-    return vec_path if vec_path.suffix else vec_path / f"{collection}.sqlite3"
+    return vec_path if vec_path.suffix else vec_path / f"vectors.{collection}.db"
 
 
 @dataclass
@@ -60,7 +87,7 @@ def build_repo_vector_index(
     else:
         project_root = project_root.resolve()
     
-    repo_chunks_db_path = project_root / ".cache" / "repo_chunks.sqlite3"
+    repo_chunks_db_path = project_root / ".kano" / "cache" / "backlog" / "chunks.repo.v1.db"
     if not repo_chunks_db_path.exists():
         raise FileNotFoundError(f"Repo chunks DB not found: {repo_chunks_db_path} (run chunks build-repo first)")
     
@@ -95,7 +122,7 @@ def build_repo_vector_index(
     
     vec_path = Path(pc.vector.path)
     if not vec_path.is_absolute():
-        vec_path = project_root / ".cache" / "vectors"
+        vec_path = project_root / ".kano" / "cache" / "backlog"
     
     max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)
     

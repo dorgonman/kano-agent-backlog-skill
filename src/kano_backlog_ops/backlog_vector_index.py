@@ -313,7 +313,9 @@ def build_vector_index(
             existing_chunk_ids = set()
 
     # Ensure canonical chunks DB exists and is fresh (single chunk contract).
-    chunks_db_path = ctx.product_root / ".cache" / "chunks.sqlite3"
+    repo_root = ctx.backlog_root.parent.parent
+    cache_dir = repo_root / ".kano" / "cache" / "backlog"
+    chunks_db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
     if force or _chunks_db_is_stale(product_root=ctx.product_root, chunks_db_path=chunks_db_path):
         from kano_backlog_ops.backlog_chunks_db import build_chunks_db
 

@@ -70,9 +70,9 @@ class BuildProgress:
 
 def _get_status_file_path(project_root: Path) -> Path:
     """Get the path to the build status file."""
-    cache_dir = project_root / ".cache"
+    cache_dir = project_root / ".kano" / "cache" / "backlog"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / "repo_build_status.json"
+    return cache_dir / "chunks.repo.v1.status"
 
 
 def get_build_progress(project_root: Optional[Path] = None) -> Optional[BuildProgress]:
@@ -244,9 +244,9 @@ def build_repo_chunks_db_async(
     if exclude_patterns is None:
         exclude_patterns = DEFAULT_EXCLUDE_PATTERNS
     
-    cache_dir = project_root / ".cache"
+    cache_dir = project_root / ".kano" / "cache" / "backlog"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    db_path = cache_dir / "repo_chunks.sqlite3"
+    db_path = cache_dir / "chunks.repo.v1.db"
     status_file = _get_status_file_path(project_root)
     
     if db_path.exists() and not force:

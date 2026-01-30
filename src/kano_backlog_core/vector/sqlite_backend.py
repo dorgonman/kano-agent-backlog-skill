@@ -45,25 +45,40 @@ class SQLiteVectorBackend(VectorBackendAdapter):
 
     def _resolve_db_path(self) -> Path:
         if self._embedding_space_id:
-            digest = hashlib.sha256(self._embedding_space_id.encode("utf-8")).hexdigest()[:12]
-            # If base_path is a directory, place per-space db inside.
+            components = {}
+            for segment in self._embedding_space_id.split('|'):
+                if ':' in segment:
+                    key, value = segment.split(':', 1)
+                    components[key] = value
+            
+            corpus = components.get('corpus', 'unknown')
+            
+            emb_parts = components.get('emb', '').split(':')
+            if len(emb_parts) >= 3:
+                emb_type = emb_parts[0]
+                emb_dim = emb_parts[-1]
+                emb_short = f"{emb_type}-{emb_dim}"
+            else:
+                emb_short = "unknown"
+            
+            digest = hashlib.sha256(self._embedding_space_id.encode("utf-8")).hexdigest()[:8]
+            
             if self._base_path.suffix:
                 base_dir = self._base_path.parent
             else:
                 base_dir = self._base_path
-            return base_dir / f"{self._collection}.{digest}.sqlite3"
+            return base_dir / f"vectors.{corpus}.{emb_short}.{digest}.db"
 
-        # Fallback: treat base_path as a file when it has a suffix, otherwise default name.
         if self._base_path.suffix:
             return self._base_path
-        return self._base_path / f"{self._collection}.sqlite3"
+        return self._base_path / f"vectors.{self._collection}.db"
 
     def _write_metadata_file(self) -> None:
         """Write human-readable metadata file next to the SQLite database."""
         if not self._db_path or not self._embedding_space_id:
             return
         
-        metadata_path = self._db_path.with_suffix('.meta.json')
+        metadata_path = self._db_path.with_suffix('.meta')
         
         # Parse embedding_space_id to extract components
         parts = {}

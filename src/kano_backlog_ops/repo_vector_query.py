@@ -44,7 +44,7 @@ def search_repo_hybrid(
     else:
         project_root = project_root.resolve()
     
-    repo_chunks_db_path = project_root / ".cache" / "repo_chunks.sqlite3"
+    repo_chunks_db_path = project_root / ".kano" / "cache" / "backlog" / "chunks.repo.v1.db"
     if not repo_chunks_db_path.exists():
         raise FileNotFoundError(f"Repo chunks DB not found: {repo_chunks_db_path}")
     
