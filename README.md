@@ -216,6 +216,47 @@ kano-backlog workitem add-decision KABSD-TSK-0001 \
 
 See [docs/topic.md](docs/topic.md) for complete documentation.
 
+## Cache Configuration
+
+The backlog skill stores cache files (chunks databases and vector embeddings) in `.kano/cache/backlog/` by default. You can override this location for team collaboration scenarios like shared NAS storage.
+
+### Configuration Priority
+
+1. **CLI parameter**: `--cache-root /path/to/cache` (highest priority)
+2. **Config file**: `config.cache.root = "/path/to/cache"`
+3. **Default**: `<repo_root>/.kano/cache/backlog/`
+
+### Using Config File (Recommended)
+
+Add to your product config (`_kano/backlog/products/<product>/_config/config.toml`):
+
+```toml
+[cache]
+# Override cache location for shared NAS storage
+root = "/mnt/nas/shared-cache/backlog"
+```
+
+### Using CLI Override
+
+For one-off operations or testing:
+
+```bash
+# Build embeddings with custom cache location
+kano-backlog embedding build --product my-product --cache-root /mnt/nas/cache
+
+# Search with custom cache location
+kano-backlog search query "authentication" --product my-product --cache-root /mnt/nas/cache
+kano-backlog search hybrid "user login" --product my-product --cache-root /mnt/nas/cache
+```
+
+### Use Cases
+
+**Team Collaboration**: Store cache on shared NAS so multiple team members can share embeddings and chunks databases without rebuilding.
+
+**External Projects**: When `kano-opencode-quickstart` has an external backlog pointing to `kano-agent-backlog-skill-demo`, configure a shared cache location so both projects use the same cache.
+
+**CI/CD**: Use a persistent cache volume to speed up builds by reusing embeddings across pipeline runs.
+
 ## Skill version
 
 Show the current skill version:

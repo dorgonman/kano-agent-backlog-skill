@@ -28,6 +28,7 @@ def query(
     k: int = typer.Option(10, "--top-k", "-k", help="Number of results to return"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     project_root: Optional[Path] = typer.Option(None, "--project-root", help="Project root (for repo corpus)"),
+    cache_root: Optional[Path] = typer.Option(None, "--cache-root", help="Cache root directory (overrides config)"),
 ):
     """Searfor similar content using vector embeddings.
     
@@ -46,6 +47,7 @@ def query(
                 product=product or "kano-agent-backlog-skill",
                 k=k,
                 backlog_root=backlog_root,
+                cache_root=cache_root,
             )
         except Exception as e:
             console.print(f"[red]❌ Search failed:[/red] {e}")
@@ -92,6 +94,7 @@ def hybrid(
     snippet_tokens: int = typer.Option(20, "--snippet-tokens", help="FTS snippet token length"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     project_root: Optional[Path] = typer.Option(None, "--project-root", help="Project root (for repo corpus)"),
+    cache_root: Optional[Path] = typer.Option(None, "--cache-root", help="Cache root directory (overrides config)"),
 ):
     """Hybrid search: FTS candidates -> vector rerank (with snippet).
     
@@ -112,6 +115,7 @@ def hybrid(
                 fts_k=fts_k,
                 snippet_tokens=snippet_tokens,
                 backlog_root=backlog_root,
+                cache_root=cache_root,
             )
         except Exception as e:
             console.print(f"[red]❌ Hybrid search failed:[/red] {e}")

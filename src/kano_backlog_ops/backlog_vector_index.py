@@ -248,7 +248,8 @@ def build_vector_index(
     *,
     product: str,
     backlog_root: Optional[Path] = None,
-    force: bool = False
+    force: bool = False,
+    cache_root: Optional[Path] = None
 ) -> VectorIndexResult:
     """Build vector index for a product."""
     t0 = time.perf_counter()
@@ -313,13 +314,17 @@ def build_vector_index(
             existing_chunk_ids = set()
 
     # Ensure canonical chunks DB exists and is fresh (single chunk contract).
-    repo_root = ctx.backlog_root.parent.parent
-    cache_dir = repo_root / ".kano" / "cache" / "backlog"
+    if cache_root:
+        cache_dir = Path(cache_root)
+    else:
+        from kano_backlog_core.config import ConfigLoader
+        cache_dir = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
+    
     chunks_db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
     if force or _chunks_db_is_stale(product_root=ctx.product_root, chunks_db_path=chunks_db_path):
         from kano_backlog_ops.backlog_chunks_db import build_chunks_db
 
-        build_chunks_db(product=product, backlog_root=ctx.backlog_root, force=True)
+        build_chunks_db(product=product, backlog_root=ctx.backlog_root, force=True, cache_root=cache_root)
 
     if not chunks_db_path.exists():
         raise FileNotFoundError(f"Chunks DB not found: {chunks_db_path}")

@@ -44,7 +44,8 @@ def search_similar(
     query_text: str,
     product: str,
     k: int = 10,
-    backlog_root: Optional[Path] = None
+    backlog_root: Optional[Path] = None,
+    cache_root: Optional[Path] = None
 ) -> List[SearchResult]:
     """
     Search for similar chunks using vector similarity.
@@ -130,6 +131,7 @@ def search_hybrid(
     fts_k: int = 200,
     snippet_tokens: int = 20,
     backlog_root: Optional[Path] = None,
+    cache_root: Optional[Path] = None
 ) -> List[HybridSearchResult]:
     """Hybrid search: FTS candidate retrieval -> vector rerank.
 
@@ -158,6 +160,7 @@ def search_hybrid(
         query=query_text,
         k=fts_k,
         snippet_tokens=snippet_tokens,
+        cache_root=cache_root
     )
     if not candidates:
         return []

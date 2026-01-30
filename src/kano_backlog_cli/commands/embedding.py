@@ -21,6 +21,7 @@ def build_index(
     source_id: Optional[str] = typer.Option(None, "--source-id", help="Source ID for text input (required with --text)"),
     product: str = typer.Option("kano-agent-backlog-skill", "--product", help="Product name"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
+    cache_root: Optional[Path] = typer.Option(None, "--cache-root", help="Cache root directory (overrides config)"),
     force: bool = typer.Option(False, "--force", help="Force rebuild of existing index"),
     output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
     # Tokenizer configuration options
@@ -202,7 +203,8 @@ def build_index(
         result = build_vector_index(
             product=product,
             backlog_root=backlog_root,
-            force=force
+            force=force,
+            cache_root=cache_root
         )
         
         if output_format == "json":

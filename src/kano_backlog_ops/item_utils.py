@@ -61,8 +61,10 @@ def sync_id_sequences(
         prefix = derive_prefix(product)
     
     items_root = backlog_root / "items"
-    cache_dir = backlog_root / ".cache"
-    db_path = cache_dir / "chunks.sqlite3"
+    
+    ctx, effective = ConfigLoader.load_effective_config(backlog_root, product=product)
+    cache_dir = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
+    db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
     
     type_code_map = {
         ItemType.EPIC: "EPIC",

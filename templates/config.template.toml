@@ -26,13 +26,11 @@ debug = false
 # Root for sandboxes relative to repository root
 root = "_kano/backlog_sandbox"
 
-[index]
-# Enable derived index (_kano/backlog/_index)
-enabled = true
-backend = "sqlite"
-# Path is optional; when null, defaults to `_kano/backlog/_index/backlog.sqlite3`
-path = null
-mode = "rebuild"
+[cache]
+# Optional: Override cache location (e.g., for shared NAS storage)
+# If not specified, defaults to <repo_root>/.kano/cache/backlog/
+# Useful for team collaboration with shared cache on network storage
+# root = "/mnt/nas/shared-cache/backlog"
 
 [analysis.llm]
 # Enable derived LLM analysis; keep secrets in env vars, not here

@@ -140,6 +140,30 @@ class ConfigLoader:
         return backlog_root / ".cache" / "worksets"
 
     @staticmethod
+    def get_chunks_cache_root(
+        backlog_root: Path,
+        effective_config: Optional[dict[str, Any]] = None
+    ) -> Path:
+        """Get the root directory for chunks/vectors cache.
+        
+        Priority:
+        1. config.cache.root (if specified)
+        2. Default: backlog_root.parent.parent / ".kano" / "cache" / "backlog"
+        
+        This allows cache to be stored in a shared location (e.g., NAS)
+        independent of where the backlog data is stored.
+        """
+        if effective_config:
+            cache_config = effective_config.get("cache", {})
+            if isinstance(cache_config, dict):
+                cache_root = cache_config.get("root")
+                if cache_root:
+                    return Path(cache_root)
+        
+        repo_root = backlog_root.parent.parent
+        return repo_root / ".kano" / "cache" / "backlog"
+
+    @staticmethod
     def get_topics_root(backlog_root: Path) -> Path:
         # Scheme B: durable, shareable topic roots live under _kano/backlog/topics/
         # Raw materials inside a topic should be treated as cache via .gitignore/TTL.
