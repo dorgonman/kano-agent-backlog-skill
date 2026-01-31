@@ -191,11 +191,21 @@ def build_index(
             typer.echo(f"- chunks_trimmed: {result.chunks_trimmed}")
         
     else:
-        # Build full product index
+        from kano_backlog_core.config import ConfigLoader
         from kano_backlog_ops.backlog_vector_index import build_vector_index
         
-        # For full product index, tokenizer overrides need to be applied differently
-        # This would require modifying the build_vector_index function to accept overrides
+        ctx, effective = ConfigLoader.load_effective_config(
+            Path("."),
+            product=product
+        )
+        pc = ConfigLoader.validate_pipeline_config(effective)
+        
+        if not pc.vector.enabled:
+            typer.echo(f"⚠️  Vector generation is disabled for product '{product}'", err=True)
+            typer.echo(f"   Set 'enabled = true' in [vector] section of config to enable.", err=True)
+            typer.echo(f"   Config location: _kano/backlog/products/{product}/_config/config.toml", err=True)
+            raise typer.Exit(0)
+        
         if tokenizer_overrides or tokenizer_config:
             typer.echo("⚠️  Tokenizer overrides not yet supported for full product index builds.", err=True)
             typer.echo("   Use file-specific or text-specific indexing for custom tokenizer settings.", err=True)

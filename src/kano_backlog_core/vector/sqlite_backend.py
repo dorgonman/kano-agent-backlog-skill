@@ -44,6 +44,9 @@ class SQLiteVectorBackend(VectorBackendAdapter):
         self._db_path: Optional[Path] = None
 
     def _resolve_db_path(self) -> Path:
+        if self._base_path.suffix:
+            return self._base_path
+            
         if self._embedding_space_id:
             components = {}
             for segment in self._embedding_space_id.split('|'):

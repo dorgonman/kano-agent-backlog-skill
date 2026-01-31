@@ -24,40 +24,28 @@ def _resolve_sqlite_vector_db_path(
     vec_path: Path,
     collection: str,
     embedding_space_id: Optional[str],
+    project_name: str,
 ) -> Path:
-    """Resolve vector DB path with new naming convention.
-    
-    New format: vectors.{corpus}.{embedding-short}.{hash-8}.db
-    Example: vectors.repo.noop-d1536.af3c739f.db
-    """
     if embedding_space_id:
-        # Parse embedding_space_id to extract components
-        # Format: "corpus:repo|emb:noop:noop-embedding:d1536|tok:...|chunk:...|metric:cosine"
         components = {}
         for segment in embedding_space_id.split('|'):
             key, value = segment.split(':', 1)
             components[key] = value
         
-        # Extract corpus (e.g., "repo")
-        corpus = components.get('corpus', 'unknown')
-        
-        # Extract embedding short name (e.g., "noop-d1536")
         emb_parts = components.get('emb', '').split(':')
         if len(emb_parts) >= 3:
-            emb_type = emb_parts[0]  # "noop"
-            emb_dim = emb_parts[-1]   # "d1536"
+            emb_type = emb_parts[0]
+            emb_dim = emb_parts[-1]
             emb_short = f"{emb_type}-{emb_dim}"
         else:
             emb_short = "unknown"
         
-        # Generate hash (first 8 chars)
         digest = hashlib.sha256(embedding_space_id.encode("utf-8")).hexdigest()[:8]
         
-        # New naming: vectors.{corpus}.{embedding-short}.{hash-8}.db
         base_dir = vec_path.parent if vec_path.suffix else vec_path
-        return base_dir / f"vectors.{corpus}.{emb_short}.{digest}.db"
+        return base_dir / f"repo.{project_name}.vectors.{emb_short}.{digest}.db"
 
-    return vec_path if vec_path.suffix else vec_path / f"vectors.{collection}.db"
+    return vec_path if vec_path.suffix else vec_path / f"repo.{project_name}.vectors.db"
 
 
 @dataclass
@@ -87,7 +75,9 @@ def build_repo_vector_index(
     else:
         project_root = project_root.resolve()
     
-    repo_chunks_db_path = project_root / ".kano" / "cache" / "backlog" / "chunks.repo.v1.db"
+    project_name = project_root.name
+    
+    repo_chunks_db_path = project_root / ".kano" / "cache" / "backlog" / f"repo.{project_name}.chunks.v1.db"
     if not repo_chunks_db_path.exists():
         raise FileNotFoundError(f"Repo chunks DB not found: {repo_chunks_db_path} (run chunks build-repo first)")
     
@@ -111,6 +101,18 @@ def build_repo_vector_index(
     except (ConfigError, FileNotFoundError) as e:
         raise ConfigError(f"Cannot resolve pipeline config: {e}")
     
+    if not pc.vector.enabled:
+        logger.info(f"Vector generation disabled for repo corpus (vector.enabled=false)")
+        return RepoVectorIndexResult(
+            files_processed=0,
+            chunks_generated=0,
+            chunks_indexed=0,
+            chunks_skipped=0,
+            chunks_pruned=0,
+            duration_ms=(time.perf_counter() - t0) * 1000,
+            backend_type=pc.vector.backend,
+        )
+    
     tokenizer = resolve_tokenizer(pc.tokenizer.adapter, pc.tokenizer.model)
     
     embed_cfg = {
@@ -120,9 +122,7 @@ def build_repo_vector_index(
     }
     embedder = resolve_embedder(embed_cfg)
     
-    vec_path = Path(pc.vector.path)
-    if not vec_path.is_absolute():
-        vec_path = project_root / ".kano" / "cache" / "backlog"
+    vec_path = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
     
     max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)
     
@@ -150,6 +150,7 @@ def build_repo_vector_index(
             vec_path=vec_path,
             collection="repo_chunks",
             embedding_space_id=embedding_space_id,
+            project_name=project_name,
         )
         
         if sqlite_vec_db_path.exists() and force:

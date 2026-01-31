@@ -576,7 +576,7 @@ def create_item(
     next_id = 0
     ctx, effective = ConfigLoader.load_effective_config(backlog_root, product=product)
     cache_dir = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
-    db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
+    db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
     
     try:
         next_id = item_utils.get_next_id_from_db(db_path, prefix, type_code)

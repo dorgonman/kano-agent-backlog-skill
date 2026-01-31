@@ -44,7 +44,14 @@ def search_repo_hybrid(
     else:
         project_root = project_root.resolve()
     
-    repo_chunks_db_path = project_root / ".kano" / "cache" / "backlog" / "chunks.repo.v1.db"
+    # Get project name from project root directory
+    project_name = project_root.name
+    
+    backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
+    _, effective = ConfigLoader.load_effective_config(backlog_root_path, product=None)
+    cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
+    
+    repo_chunks_db_path = cache_dir / f"repo.{project_name}.chunks.v1.db"
     if not repo_chunks_db_path.exists():
         raise FileNotFoundError(f"Repo chunks DB not found: {repo_chunks_db_path}")
     

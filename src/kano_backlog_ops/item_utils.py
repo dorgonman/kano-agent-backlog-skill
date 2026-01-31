@@ -11,7 +11,7 @@ import re
 import sqlite3
 import unicodedata
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
 
 
@@ -64,7 +64,7 @@ def sync_id_sequences(
     
     ctx, effective = ConfigLoader.load_effective_config(backlog_root, product=product)
     cache_dir = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
-    db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
+    db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
     
     type_code_map = {
         ItemType.EPIC: "EPIC",
@@ -137,6 +137,90 @@ def sync_id_sequences(
             conn.close()
             
     return results
+
+
+def resolve_product_prefix(product_root: Path, product: str) -> str:
+    """Resolve the ID prefix for a product."""
+    try:
+        from kano_backlog_core.project_config import ProjectConfigLoader
+
+        project_config = ProjectConfigLoader.load_project_config_optional(product_root)
+        if project_config:
+            product_def = project_config.get_product(product)
+            if product_def:
+                return product_def.prefix
+    except Exception:
+        pass
+    return derive_prefix(product)
+
+
+def load_db_sequences(db_path: Path, prefix: str) -> Dict[str, int]:
+    """Load ID sequence counters from the SQLite DB."""
+    if not db_path.exists():
+        return {}
+
+    conn = None
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='id_sequences'"
+        )
+        if not cursor.fetchone():
+            return {}
+        cursor = conn.execute(
+            "SELECT type_code, next_number FROM id_sequences WHERE prefix = ?",
+            (prefix,),
+        )
+        rows = cursor.fetchall()
+        return {row[0]: row[1] for row in rows}
+    except sqlite3.Error:
+        return {}
+    finally:
+        if conn:
+            conn.close()
+
+
+def check_sequence_health(
+    product: str,
+    product_root: Path,
+) -> Tuple[Path, Dict[str, Dict[str, Any]]]:
+    """Compare DB sequences against filesystem max IDs."""
+    ctx, effective = ConfigLoader.load_effective_config(product_root, product=product)
+    cache_dir = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
+    db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
+
+    prefix = resolve_product_prefix(product_root, product)
+    items_root = product_root / "items"
+
+    type_code_map = {
+        ItemType.EPIC: "EPIC",
+        ItemType.FEATURE: "FTR",
+        ItemType.USER_STORY: "USR",
+        ItemType.TASK: "TSK",
+        ItemType.BUG: "BUG",
+    }
+
+    db_sequences = load_db_sequences(db_path, prefix)
+    status_map: Dict[str, Dict[str, Any]] = {}
+
+    for item_type, type_code in type_code_map.items():
+        file_next = find_next_number(items_root, prefix, type_code)
+        file_max = max(file_next - 1, 0)
+        db_next = db_sequences.get(type_code)
+        if db_next is None:
+            status = "MISSING"
+        elif db_next < file_max:
+            status = "STALE"
+        else:
+            status = "OK"
+        status_map[type_code] = {
+            "status": status,
+            "db_next": db_next,
+            "file_next": file_next,
+            "file_max": file_max,
+        }
+
+    return db_path, status_map
 
 
 def slugify(text: str, max_len: int = 80) -> str:

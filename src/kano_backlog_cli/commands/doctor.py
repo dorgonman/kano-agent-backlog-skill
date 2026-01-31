@@ -10,7 +10,7 @@ import json
 import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 import typer
 from rich.console import Console
@@ -196,15 +196,119 @@ def check_kano_backlog_cli() -> CheckResult:
         )
 
 
+def _format_sequence_details(status_map: Dict[str, Dict[str, Any]]) -> str:
+    order = ["EPIC", "FTR", "USR", "TSK", "BUG"]
+    lines: List[str] = []
+    for type_code in order:
+        status = status_map.get(type_code, {})
+        state = status.get("status", "MISSING")
+        db_next = status.get("db_next")
+        file_max = status.get("file_max")
+        if file_max is None:
+            file_max = status.get("file_next")
+        db_value = db_next if db_next is not None else "missing"
+        lines.append(f"{type_code}: {state} (db={db_value}, files={file_max})")
+    return "\n".join(lines)
+
+
+def check_db_sequences(
+    product: Optional[str] = None,
+    fix: bool = False,
+) -> CheckResult:
+    """Check DB ID sequences against filesystem max IDs."""
+    try:
+        from kano_backlog_core.config import ConfigLoader
+        from kano_backlog_core.project_config import ProjectConfigLoader
+        from kano_backlog_ops import item_utils
+    except Exception as exc:
+        return CheckResult(
+            name="DB Sequences",
+            passed=False,
+            message="Required modules not available for sequence check",
+            details=str(exc),
+        )
+
+    product_name = product
+    if not product_name:
+        project_config = ProjectConfigLoader.load_project_config_optional(Path.cwd())
+        if not project_config:
+            return CheckResult(
+                name="DB Sequences",
+                passed=True,
+                message="Sequence check skipped (project config not found)",
+            )
+        products = project_config.list_products()
+        if len(products) == 1:
+            product_name = products[0]
+        else:
+            return CheckResult(
+                name="DB Sequences",
+                passed=True,
+                message="Sequence check skipped (multiple products; use --product)",
+                details=f"Products: {', '.join(products)}",
+            )
+
+    try:
+        ctx = ConfigLoader.from_path(Path.cwd(), product=product_name)
+        product_root = ctx.product_root
+    except Exception as exc:
+        return CheckResult(
+            name="DB Sequences",
+            passed=False,
+            message=f"Failed to resolve product '{product_name}'",
+            details=str(exc),
+        )
+
+    db_path, status_map = item_utils.check_sequence_health(product_name, product_root)
+    needs_fix = any(
+        status.get("status") != "OK" for status in status_map.values()
+    )
+    fixed = False
+
+    if fix and needs_fix:
+        try:
+            item_utils.sync_id_sequences(product=product_name, backlog_root=None, dry_run=False)
+            db_path, status_map = item_utils.check_sequence_health(product_name, product_root)
+            fixed = True
+        except Exception as exc:
+            return CheckResult(
+                name="DB Sequences",
+                passed=False,
+                message=f"Sequence sync failed for '{product_name}'",
+                details=str(exc),
+            )
+
+    all_ok = all(status.get("status") == "OK" for status in status_map.values())
+    if all_ok:
+        message = f"Sequence health OK for '{product_name}'"
+    elif fixed:
+        message = f"Sequences synced for '{product_name}'"
+    else:
+        message = f"Sequences stale or missing for '{product_name}'"
+
+    details = _format_sequence_details(status_map)
+    if db_path:
+        details = f"DB: {db_path}\n{details}"
+
+    return CheckResult(
+        name="DB Sequences",
+        passed=all_ok,
+        message=message,
+        details=details,
+    )
+
+
 def run_doctor(
     product: Optional[str] = None,
     backlog_root: Optional[Path] = None,
+    fix: bool = False,
 ) -> DoctorResult:
     """Run all doctor checks."""
     checks = [
         check_python_prereqs(),
         check_skill_layout(),
         check_backlog_initialized(product=product, backlog_root=backlog_root),
+        check_db_sequences(product=product, fix=fix),
         check_kano_backlog_cli(),
     ]
     
@@ -248,6 +352,11 @@ def doctor(
         None, "--product", "-p",
         help="Product name to check (optional)",
     ),
+    fix: bool = typer.Option(
+        False,
+        "--fix",
+        help="Auto-sync DB ID sequences when stale",
+    ),
     format: str = typer.Option(
         "plain", "--format", "-f",
         help="Output format: plain, json",
@@ -259,9 +368,10 @@ def doctor(
     Verifies:
     - Python prerequisites are installed
     - Backlog is initialized
+    - DB ID sequences are healthy (optionally auto-synced)
     - Kano CLI is available
     """
-    result = run_doctor(product=product)
+    result = run_doctor(product=product, fix=fix)
     
     if format == "json":
         format_result_json(result)

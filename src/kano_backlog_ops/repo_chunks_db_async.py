@@ -68,11 +68,13 @@ class BuildProgress:
         return cls(**data)
 
 
-def _get_status_file_path(project_root: Path) -> Path:
-    """Get the path to the build status file."""
-    cache_dir = project_root / ".kano" / "cache" / "backlog"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / "chunks.repo.v1.status"
+def _get_status_file_path(project_root: Path, backlog_root: Optional[Path] = None) -> Path:
+    from .init import _resolve_backlog_root
+    project_name = project_root.name
+    backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
+    _, effective = ConfigLoader.load_effective_config(backlog_root_path, product=None)
+    cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
+    return cache_dir / f"repo.{project_name}.chunks.v1.status"
 
 
 def get_build_progress(project_root: Optional[Path] = None) -> Optional[BuildProgress]:
@@ -244,10 +246,15 @@ def build_repo_chunks_db_async(
     if exclude_patterns is None:
         exclude_patterns = DEFAULT_EXCLUDE_PATTERNS
     
-    cache_dir = project_root / ".kano" / "cache" / "backlog"
+    # Get project name from project root directory
+    project_name = project_root.name
+    
+    backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
+    _, effective = ConfigLoader.load_effective_config(backlog_root_path, product=None)
+    cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    db_path = cache_dir / "chunks.repo.v1.db"
-    status_file = _get_status_file_path(project_root)
+    db_path = cache_dir / f"repo.{project_name}.chunks.v1.db"
+    status_file = _get_status_file_path(project_root, backlog_root)
     
     if db_path.exists() and not force:
         raise FileExistsError(f"Repo chunks DB already exists: {db_path} (use force to rebuild)")

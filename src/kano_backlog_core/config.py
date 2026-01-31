@@ -338,7 +338,8 @@ class ConfigLoader:
                 "dimension": 1536,
             },
             "vector": {
-                "backend": "noop",
+                "enabled": False,
+                "backend": "sqlite",
                 "path": ".cache/vector",
                 "collection": "backlog",
                 "metric": "cosine",

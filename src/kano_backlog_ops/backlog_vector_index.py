@@ -27,13 +27,29 @@ def _resolve_sqlite_vector_db_path(
     vec_path: Path,
     collection: str,
     embedding_space_id: Optional[str],
+    product: str,
 ) -> Path:
     if embedding_space_id:
-        digest = hashlib.sha256(embedding_space_id.encode("utf-8")).hexdigest()[:12]
+        components = {}
+        for segment in embedding_space_id.split('|'):
+            if ':' in segment:
+                key, value = segment.split(':', 1)
+                components[key] = value
+        
+        emb_parts = components.get('emb', '').split(':')
+        if len(emb_parts) >= 3:
+            emb_type = emb_parts[0]
+            emb_dim = emb_parts[-1]
+            emb_short = f"{emb_type}-{emb_dim}"
+        else:
+            emb_short = "unknown"
+        
+        digest = hashlib.sha256(embedding_space_id.encode("utf-8")).hexdigest()[:8]
+        
         base_dir = vec_path.parent if vec_path.suffix else vec_path
-        return base_dir / f"{collection}.{digest}.sqlite3"
+        return base_dir / f"backlog.{product}.vectors.{emb_short}.{digest}.db"
 
-    return vec_path if vec_path.suffix else vec_path / f"{collection}.sqlite3"
+    return vec_path if vec_path.suffix else vec_path / f"backlog.{product}.vectors.db"
 
 
 def _chunks_db_is_stale(*, product_root: Path, chunks_db_path: Path) -> bool:
@@ -263,6 +279,16 @@ def build_vector_index(
     
     pc = ConfigLoader.validate_pipeline_config(effective)
     
+    if not pc.vector.enabled:
+        logger.info(f"Vector generation disabled for product '{product}' (vector.enabled=false)")
+        return VectorIndexResult(
+            items_processed=0,
+            chunks_generated=0,
+            chunks_indexed=0,
+            duration_ms=(time.perf_counter() - t0) * 1000,
+            backend_type=pc.vector.backend
+        )
+    
     # Resolve components
     tokenizer = resolve_tokenizer(pc.tokenizer.adapter, pc.tokenizer.model)
     
@@ -273,36 +299,38 @@ def build_vector_index(
     }
     embedder = resolve_embedder(embed_cfg)
     
-    vec_path = Path(pc.vector.path)
-    if not vec_path.is_absolute():
-        vec_path = ctx.product_root / vec_path
+    if cache_root:
+        vec_path = Path(cache_root)
+    else:
+        vec_path = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
         
     embedding_space_id = (
-        f"emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
+        f"corpus:backlog"
+        f"|emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
         f"|tok:{pc.tokenizer.adapter}:{pc.tokenizer.model}:max{pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)}"
         f"|chunk:{pc.chunking.version}"
         f"|metric:{pc.vector.metric}"
     )
 
-    vec_cfg = {
-        "backend": pc.vector.backend,
-        "path": str(vec_path),
-        "collection": pc.vector.collection,
-        "embedding_space_id": embedding_space_id,
-    }
-    # If requested, clear the vector DB for this embedding space.
     sqlite_vec_db_path: Optional[Path] = None
-    existing_chunk_ids: set[str] = set()
-
     if pc.vector.backend == "sqlite":
         sqlite_vec_db_path = _resolve_sqlite_vector_db_path(
             vec_path=vec_path,
             collection=pc.vector.collection,
             embedding_space_id=embedding_space_id,
+            product=product,
         )
 
         if force and sqlite_vec_db_path.exists():
             sqlite_vec_db_path.unlink()
+    
+    vec_cfg = {
+        "backend": pc.vector.backend,
+        "path": str(sqlite_vec_db_path) if sqlite_vec_db_path else str(vec_path),
+        "collection": pc.vector.collection,
+        "embedding_space_id": embedding_space_id,
+    }
+    existing_chunk_ids: set[str] = set()
 
     backend = get_backend(vec_cfg)
     backend.prepare(schema={}, dims=pc.embedding.dimension, metric=pc.vector.metric)
@@ -317,14 +345,15 @@ def build_vector_index(
     if cache_root:
         cache_dir = Path(cache_root)
     else:
-        from kano_backlog_core.config import ConfigLoader
-        cache_dir = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
+        real_backlog_root = ctx.project_root / "_kano" / "backlog"
+        cache_dir = ConfigLoader.get_chunks_cache_root(real_backlog_root, effective)
     
-    chunks_db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
+    chunks_db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
     if force or _chunks_db_is_stale(product_root=ctx.product_root, chunks_db_path=chunks_db_path):
         from kano_backlog_ops.backlog_chunks_db import build_chunks_db
 
-        build_chunks_db(product=product, backlog_root=ctx.backlog_root, force=True, cache_root=cache_root)
+        real_backlog_root = ctx.project_root / "_kano" / "backlog"
+        build_chunks_db(product=product, backlog_root=real_backlog_root, force=True, cache_root=cache_root)
 
     if not chunks_db_path.exists():
         raise FileNotFoundError(f"Chunks DB not found: {chunks_db_path}")

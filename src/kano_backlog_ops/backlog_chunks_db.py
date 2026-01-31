@@ -205,7 +205,7 @@ def build_chunks_db(
         cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
     
     cache_dir.mkdir(parents=True, exist_ok=True)
-    db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
+    db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
     if db_path.exists() and not force:
         raise FileExistsError(f"Chunks DB already exists: {db_path} (use force to rebuild)")
 
@@ -546,7 +546,7 @@ def query_chunks_fts_candidates(
     product_root = backlog_root_path / "products" / product
     repo_root = backlog_root_path.parent.parent
     cache_dir = repo_root / ".kano" / "cache" / "backlog"
-    db_path = cache_dir / f"chunks.backlog.{product}.v1.db"
+    db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
     if not db_path.exists():
         raise FileNotFoundError(f"Chunks DB not found: {db_path} (run chunks build first)")
 

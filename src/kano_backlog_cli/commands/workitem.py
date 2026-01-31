@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any
 import json
 from pathlib import Path
 from typing import List
@@ -19,6 +19,17 @@ app = typer.Typer()
 def _parse_tags(raw: str) -> List[str]:
     """Normalize a comma-separated tag list."""
     return [tag.strip() for tag in raw.split(",") if tag.strip()] if raw else []
+
+
+def _summarize_sequence_status(status_map: Dict[str, Dict[str, Any]]) -> str:
+    stale = [code for code, status in status_map.items() if status.get("status") == "STALE"]
+    missing = [code for code, status in status_map.items() if status.get("status") == "MISSING"]
+    labels: List[str] = []
+    if stale:
+        labels.append(f"stale: {', '.join(sorted(stale))}")
+    if missing:
+        labels.append(f"missing: {', '.join(sorted(missing))}")
+    return "; ".join(labels)
 
 
 @app.command()
@@ -182,6 +193,8 @@ def _run_create_command(
     product: Optional[str],
     backlog_root_override: Optional[Path],
     force: bool,
+    skip_sequence_check: bool,
+    auto_sync: bool,
     output_format: str,
 ) -> None:
     """Invoke the ops-layer create implementation and handle formatting."""
@@ -206,10 +219,64 @@ def _run_create_command(
 
     try:
         product_root = resolve_product_root(product, backlog_root_override=backlog_root_override)
+
+        effective_product = product
+        if effective_product is None:
+            from kano_backlog_core.config import ConfigLoader
+
+            ctx = ConfigLoader.from_path(product_root, product=product)
+            effective_product = ctx.product_name
+        product_to_use = effective_product or product
+
+        if not skip_sequence_check:
+            from kano_backlog_ops import item_utils
+
+            db_path, status_map = item_utils.check_sequence_health(
+                effective_product,
+                product_root,
+            )
+            summary = _summarize_sequence_status(status_map)
+            needs_attention = any(
+                status.get("status") != "OK" for status in status_map.values()
+            )
+            if needs_attention:
+                typer.echo(
+                    "Warning: DB sequences are stale or missing; consider syncing sequences."
+                )
+                if summary:
+                    typer.echo(f"  Details: {summary}")
+                typer.echo(
+                    "  Suggested: python skills/kano-agent-backlog-skill/scripts/kano-backlog admin "
+                    f"sync-sequences --product {effective_product}"
+                )
+                if auto_sync:
+                    item_utils.sync_id_sequences(
+                product=effective_product,
+                backlog_root=None,
+                dry_run=False,
+            )
+                    typer.echo("DB sequences synced automatically")
+                    try:
+                        from kano_backlog_core.audit import AuditLog
+
+                        AuditLog.log_file_operation(
+                            operation="update",
+                            path=str(db_path),
+                            tool="kano-backlog workitem create",
+                            agent=agent,
+                            metadata={
+                                "action": "auto-sync-sequences",
+                                "product": effective_product,
+                                "status": summary or "stale-or-missing",
+                            },
+                        )
+                    except Exception:
+                        pass
+
         result = ops_create_item(
             item_type=type_map[type_key],
             title=title,
-            product=product,
+            product=product_to_use,
             agent=agent,
             parent=parent,
             priority=priority,
@@ -260,6 +327,16 @@ def create(
         help="Backlog root override (e.g., _kano/backlog_sandbox/<name>)",
     ),
     force: bool = typer.Option(False, "--force", help="Bypass parent Ready gate check"),
+    skip_sequence_check: bool = typer.Option(
+        False,
+        "--skip-sequence-check",
+        help="Skip DB sequence staleness check",
+    ),
+    auto_sync: bool = typer.Option(
+        True,
+        "--auto-sync/--no-auto-sync",
+        help="Auto-sync sequences when stale",
+    ),
     output_format: str = typer.Option("plain", "--format", help="plain|json"),
 ):
     """Create a new backlog work item (ops-backed implementation)."""
@@ -275,6 +352,8 @@ def create(
         product=product,
         backlog_root_override=backlog_root_override,
         force=force,
+        skip_sequence_check=skip_sequence_check,
+        auto_sync=auto_sync,
         output_format=output_format,
     )
 
