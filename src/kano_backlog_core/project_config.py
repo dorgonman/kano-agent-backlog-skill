@@ -30,9 +30,59 @@ class ProductDefinition(BaseModel):
     name: str = Field(..., description="Product display name")
     prefix: str = Field(..., description="Product ID prefix (e.g., 'KABSD')")
     backlog_root: str = Field(..., description="Path to backlog root (relative or absolute)")
-    overrides: Dict[str, Any] = Field(default_factory=dict, description="Product-specific config overrides")
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    # Flattened keys (product-level overrides)
+    vector_enabled: Optional[bool] = Field(default=None)
+    vector_backend: Optional[str] = Field(default=None)
+    vector_metric: Optional[str] = Field(default=None)
+    analysis_llm_enabled: Optional[bool] = Field(default=None)
+    cache_root: Optional[str] = Field(default=None)
+    log_debug: Optional[bool] = Field(default=None)
+    log_verbosity: Optional[str] = Field(default=None)
+    embedding_provider: Optional[str] = Field(default=None)
+    embedding_model: Optional[str] = Field(default=None)
+    embedding_dimension: Optional[int] = Field(default=None)
+    chunking_target_tokens: Optional[int] = Field(default=None)
+    chunking_max_tokens: Optional[int] = Field(default=None)
+    tokenizer_adapter: Optional[str] = Field(default=None)
+    tokenizer_model: Optional[str] = Field(default=None)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    def to_overrides(self) -> Dict[str, Any]:
+        def set_nested(d: Dict[str, Any], path: tuple[str, ...], value: Any) -> None:
+            current: Dict[str, Any] = d
+            for part in path[:-1]:
+                next_val = current.get(part)
+                if not isinstance(next_val, dict):
+                    next_val = {}
+                    current[part] = next_val
+                current = next_val
+            current[path[-1]] = value
+
+        overrides: Dict[str, Any] = {}
+        mapping: Dict[str, tuple[str, ...]] = {
+            "vector_enabled": ("vector", "enabled"),
+            "vector_backend": ("vector", "backend"),
+            "vector_metric": ("vector", "metric"),
+            "analysis_llm_enabled": ("analysis", "llm", "enabled"),
+            "cache_root": ("cache", "root"),
+            "log_debug": ("log", "debug"),
+            "log_verbosity": ("log", "verbosity"),
+            "embedding_provider": ("embedding", "provider"),
+            "embedding_model": ("embedding", "model"),
+            "embedding_dimension": ("embedding", "dimension"),
+            "chunking_target_tokens": ("chunking", "target_tokens"),
+            "chunking_max_tokens": ("chunking", "max_tokens"),
+            "tokenizer_adapter": ("tokenizer", "adapter"),
+            "tokenizer_model": ("tokenizer", "model"),
+        }
+
+        for attr, path in mapping.items():
+            value = getattr(self, attr)
+            if value is not None:
+                set_nested(overrides, path, value)
+        return overrides
 
     @validator('name')
     def validate_name(cls, v):
@@ -158,13 +208,19 @@ class ProjectConfigLoader:
             for name, product_data in products_data.items():
                 if not isinstance(product_data, dict):
                     raise ConfigError(f"Product '{name}' must be a table")
-                
-                products[name] = ProductDefinition(
-                    name=product_data.get("name", name),
-                    prefix=product_data.get("prefix", ""),
-                    backlog_root=product_data.get("backlog_root", ""),
-                    overrides=product_data.get("overrides", {})
-                )
+
+                if "overrides" in product_data:
+                    raise ConfigError(
+                        f"Product '{name}' uses legacy [products.{name}.overrides]. "
+                        "Use flattened keys directly under [products.<name>] instead."
+                    )
+
+                payload = dict(product_data)
+                payload["name"] = payload.get("name", name)
+                payload["prefix"] = payload.get("prefix", "")
+                payload["backlog_root"] = payload.get("backlog_root", "")
+
+                products[name] = ProductDefinition(**payload)
             
             return ProjectConfig(
                 defaults=data.get("defaults", {}),
@@ -181,12 +237,8 @@ class ProjectConfigLoader:
         config_path = ProjectConfigLoader.find_project_config(start_path, custom_config_file)
         if not config_path:
             return None
-        
-        try:
-            return ProjectConfigLoader.load_project_config(config_path)
-        except ConfigError as e:
-            logger.warning(f"Failed to load project config: {e}")
-            return None
+
+        return ProjectConfigLoader.load_project_config(config_path)
 
     @staticmethod
     def resolve_product_backlog_root(

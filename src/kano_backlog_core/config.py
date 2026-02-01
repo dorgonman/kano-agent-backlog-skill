@@ -314,11 +314,6 @@ class ConfigLoader:
                 "verbosity": "info",
                 "debug": False,
             },
-            "index": {
-                "enabled": False,
-                "backend": "noop",
-                "mode": "incremental",
-            },
             "analysis": {
                 "llm": {
                     "enabled": False,
@@ -340,7 +335,6 @@ class ConfigLoader:
             "vector": {
                 "enabled": False,
                 "backend": "sqlite",
-                "path": ".cache/vector",
                 "collection": "backlog",
                 "metric": "cosine",
             },
@@ -420,8 +414,8 @@ class ConfigLoader:
         product = project_config.get_product(product_name)
         if not product:
             return {}
-        
-        return product.overrides
+
+        return product.to_overrides()
 
     @staticmethod
     def load_effective_config(
