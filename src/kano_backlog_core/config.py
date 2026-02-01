@@ -4,12 +4,13 @@ This module resolves project/product roots and provides an "effective config"
 view by layering config sources.
 
 Layer order (later wins):
-1) _kano/backlog/_shared/defaults.toml (preferred) or defaults.json (deprecated)
-2) _kano/backlog/products/<product>/_config/config.json (or config.toml)
-3) .kano/backlog_config.toml (project-level config) - NEW
-4) _kano/backlog/.cache/worksets/topics/<topic>/config.json (or config.toml) (optional)
-5) _kano/backlog/.cache/worksets/items/<item_id>/config.json (or config.toml) (optional)
-6) CLI arguments (highest priority)
+1) System defaults (hardcoded)
+2) _kano/backlog/_shared/defaults.toml (preferred) or defaults.json (deprecated)
+3) .kano/backlog_config.toml (project-level defaults + shared)
+4) Product settings from .kano/backlog_config.toml [products.<name>] (flattened keys)
+5) Optional profile override: _kano/backlog/_shared/profiles/<profile>.toml
+6) Topic overrides: _kano/backlog/topics/<topic>/config.toml (optional)
+7) Workset overrides: _kano/backlog/.cache/worksets/items/<item_id>/config.toml (optional)
 
 TOML files take precedence over JSON at the same layer. JSON support is deprecated.
 
@@ -140,6 +141,71 @@ class ConfigLoader:
         return backlog_root / ".cache" / "worksets"
 
     @staticmethod
+    def get_profiles_root(backlog_root: Path) -> Path:
+        return backlog_root / "_shared" / "profiles"
+
+    @staticmethod
+    def _validate_profile_name(profile: str) -> str:
+        name = profile.strip()
+        if not name:
+            raise ConfigError("profile name must be non-empty")
+        if "/" in name or "\\" in name or name.startswith("."):
+            raise ConfigError(f"invalid profile name: {profile!r}")
+        return name
+
+    @staticmethod
+    def load_profile_overrides(backlog_root: Path, *, profile: Optional[str] = None) -> dict[str, Any]:
+        if not profile:
+            return {}
+        name = ConfigLoader._validate_profile_name(profile)
+        profiles_root = ConfigLoader.get_profiles_root(backlog_root)
+        config_path = profiles_root / f"{name}.toml"
+        if not config_path.exists():
+            available: list[str] = []
+            if profiles_root.exists():
+                available = sorted(p.stem for p in profiles_root.glob("*.toml") if p.is_file())
+            hint = f" Available: {', '.join(available)}" if available else " No profiles found."
+            raise ConfigError(f"Profile not found: {name!r} ({config_path}).{hint}")
+
+        data = ConfigLoader._read_toml_optional(config_path)
+        if not isinstance(data, dict):
+            raise ConfigError(f"Profile config must be a TOML table: {config_path}")
+
+        flat_map: dict[str, tuple[str, ...]] = {
+            "vector_enabled": ("vector", "enabled"),
+            "vector_backend": ("vector", "backend"),
+            "vector_metric": ("vector", "metric"),
+            "analysis_llm_enabled": ("analysis", "llm", "enabled"),
+            "cache_root": ("cache", "root"),
+            "log_debug": ("log", "debug"),
+            "log_verbosity": ("log", "verbosity"),
+            "embedding_provider": ("embedding", "provider"),
+            "embedding_model": ("embedding", "model"),
+            "embedding_dimension": ("embedding", "dimension"),
+            "chunking_target_tokens": ("chunking", "target_tokens"),
+            "chunking_max_tokens": ("chunking", "max_tokens"),
+            "tokenizer_adapter": ("tokenizer", "adapter"),
+            "tokenizer_model": ("tokenizer", "model"),
+        }
+
+        overlay: dict[str, Any] = {}
+        for k, path in flat_map.items():
+            if k not in data:
+                continue
+            value = data[k]
+            current: dict[str, Any] = overlay
+            for part in path[:-1]:
+                next_val = current.get(part)
+                if not isinstance(next_val, dict):
+                    next_val = {}
+                    current[part] = next_val
+                current = next_val
+            current[path[-1]] = value
+
+        cleaned = {k: v for k, v in data.items() if k not in flat_map}
+        return ConfigLoader._deep_merge(cleaned, overlay)
+
+    @staticmethod
     def get_chunks_cache_root(
         backlog_root: Path,
         effective_config: Optional[dict[str, Any]] = None
@@ -256,11 +322,11 @@ class ConfigLoader:
             else:
                 raise ConfigError("No products defined in project config")
 
-        backlog_root = ProjectConfigLoader.resolve_product_backlog_root(
+        product_root = ProjectConfigLoader.resolve_product_backlog_root(
             resource_path, product, project_config, custom_config_file
         )
         
-        if not backlog_root:
+        if not product_root:
             raise ConfigError(f"Product '{product}' not found in project config")
 
         # Determine project root
@@ -275,8 +341,12 @@ class ConfigLoader:
             # Custom location: assume config file is in project root
             project_root = config_path.parent
 
-        # For project config, the backlog_root IS the product root
-        product_root = backlog_root
+        # Derive canonical backlog root.
+        # In this repo layout, product roots live under: _kano/backlog/products/<product>
+        # and shared state (topics/worksets/defaults/profiles) lives under: _kano/backlog/
+        backlog_root = product_root
+        if product_root.parent.name == "products" and product_root.parent.parent.name == "backlog":
+            backlog_root = product_root.parent.parent
 
         # Determine sandbox
         sandbox_root = None
@@ -425,6 +495,7 @@ class ConfigLoader:
         sandbox: Optional[str] = None,
         agent: Optional[str] = None,
         topic: Optional[str] = None,
+        profile: Optional[str] = None,
         workset_item_id: Optional[str] = None,
         custom_config_file: Optional[Path] = None,
     ) -> tuple[BacklogContext, dict[str, Any]]:
@@ -456,13 +527,23 @@ class ConfigLoader:
         project_product_overrides = ConfigLoader.load_project_product_overrides(
             resource_path, ctx.product_name, custom_config_file
         )
+
+        profile_cfg = ConfigLoader.load_profile_overrides(ctx.backlog_root, profile=profile)
         
         topic_cfg = ConfigLoader.load_topic_overrides(ctx.backlog_root, topic=topic, agent=agent)
         workset_cfg = ConfigLoader.load_workset_overrides(ctx.backlog_root, item_id=workset_item_id)
 
         # Merge layers in precedence order (system defaults first, then user configs)
         effective: dict[str, Any] = {}
-        for layer in (system_defaults, defaults, project_cfg, project_product_overrides, topic_cfg, workset_cfg):
+        for layer in (
+            system_defaults,
+            defaults,
+            project_cfg,
+            project_product_overrides,
+            profile_cfg,
+            topic_cfg,
+            workset_cfg,
+        ):
             if isinstance(layer, dict):
                 effective = ConfigLoader._deep_merge(effective, layer)
 

@@ -120,9 +120,10 @@ If the backlog structure is missing, propose the bootstrap commands and wait for
 
 ### Developer vs user mode (where to declare it)
 
-- **Preferred source of truth**: product config in `_kano/backlog/products/<product>/_config/config.toml`.
-  - `mode.skill_developer`: `true` when this repo actively develops the skill itself (this demo repo).
-  - `mode.persona`: optional string describing the primary human persona (e.g. `developer`, `pm`, `qa`), used only for human-facing summaries/views.
+- **Preferred source of truth**: project config in `.kano/backlog_config.toml`.
+  - `[defaults]` applies to all products.
+  - `[shared.*]` applies to all products (global defaults).
+  - `[products.<name>]` defines each product and its product-specific settings (flattened keys like `vector_enabled`, `analysis_llm_enabled`, `embedding_provider`, etc.).
 - **Secondary**: agent guide files (e.g., `AGENTS.md` / `CLAUDE.md`) can document expectations, but are agent-specific and not script-readable.
 
 ### Skill developer gate (architecture compliance)
@@ -154,11 +155,12 @@ If packages are missing, install once (recommended):
 ### Backlog initialization (file scaffold + config + dashboards)
 
 Detect (multi-product / platform layout):
-- Product initialized if `_kano/backlog/products/<product>/_config/config.toml` exists (or confirm via `python skills/kano-agent-backlog-skill/scripts/kano-backlog doctor --product <product>`).
+- Product is initialized if:
+  - `.kano/backlog_config.toml` exists, and
+  - `[products.<product>]` is present with a valid `backlog_root` pointing at an existing directory.
 
 Bootstrap:
-- Run `python skills/kano-agent-backlog-skill/scripts/kano-backlog admin init --product <product> --agent <agent-id> [--backlog-root <path>]` to scaffold `_kano/backlog/products/<product>/` (items/, decisions/, views/, `_config/`, `_meta/`, `_index/`).
-- The init command derives a project prefix, writes `_config/config.toml`, and refreshes dashboards so views exist immediately after initialization.
+- Run `kano-backlog admin init --product <product> --agent <agent-id> [--backlog-root <path>]` to scaffold backlog directories and write/update `.kano/backlog_config.toml`.
 - Manual fallback (only if automation is unavailable): follow `_kano/backlog/README.md` to copy the template scaffold, then refresh views via `kano-backlog view refresh`.
 
 ## Optional LLM analysis over deterministic reports
@@ -627,9 +629,19 @@ _kano/backlog/.cache/worksets/items/<ITEM_ID>/
 
 - Active topic state is shared across agents: `_kano/backlog/.cache/worksets/state.json`
 - When an agent has an active topic, config resolution includes topic overrides:
-  - Layer order: defaults → product → **topic** → workset → runtime
+  - Layer order: defaults → product → profile → **topic** → workset → runtime
   - Topic config: `_kano/backlog/topics/<topic>/config.toml`
   - Use for temporary overrides (e.g., switch `default_product` during exploration)
+
+### Named profiles (pipeline experiments)
+
+- Profiles are file-based overrides stored at: `_kano/backlog/_shared/profiles/<profile>.toml`
+- Use `--profile <profile>` on commands like:
+  - `kano-backlog config show --product <product> --profile <profile>`
+  - `kano-backlog embedding build --product <product> --profile <profile>`
+- List and inspect profiles:
+  - `kano-backlog config profiles list --product <product>`
+  - `kano-backlog config profiles show <profile> --product <product>`
 - Inspect active topic: `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic list --agent <id>`
 - Inspect shared topic state: `python skills/kano-agent-backlog-skill/scripts/kano-backlog topic show-state --agent <id> --format json`
 

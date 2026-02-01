@@ -29,6 +29,7 @@ def build_index(
     tokenizer_model: Optional[str] = typer.Option(None, "--tokenizer-model", help="Override tokenizer model name"),
     tokenizer_max_tokens: Optional[int] = typer.Option(None, "--tokenizer-max-tokens", help="Override max tokens for tokenizer"),
     tokenizer_config: Optional[Path] = typer.Option(None, "--tokenizer-config", help="Path to tokenizer configuration file"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
 ):
     """Build embedding index for files or full product."""
     ensure_core_on_path()
@@ -84,7 +85,10 @@ def build_index(
             pc.tokenizer.options = custom_config.options
         
         # Index the text
-        result = index_document(source_id, text, pc, product_root=ctx.product_root)
+        if source_id is None:
+            raise typer.BadParameter("--source-id is required when using --text")
+        sid: str = source_id
+        result = index_document(sid, text, pc, product_root=ctx.product_root)
         
         if output_format == "json":
             payload = {
@@ -196,7 +200,8 @@ def build_index(
         
         ctx, effective = ConfigLoader.load_effective_config(
             Path("."),
-            product=product
+            product=product,
+            profile=profile,
         )
         pc = ConfigLoader.validate_pipeline_config(effective)
         
@@ -248,6 +253,7 @@ def query_index(
     tokenizer_adapter: Optional[str] = typer.Option(None, "--tokenizer-adapter", help="Tokenizer adapter (auto, heuristic, tiktoken, huggingface)"),
     tokenizer_model: Optional[str] = typer.Option(None, "--tokenizer-model", help="Override tokenizer model name"),
     tokenizer_config: Optional[Path] = typer.Option(None, "--tokenizer-config", help="Path to tokenizer configuration file"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
 ):
     """Query the embedding index for similar content."""
     ensure_core_on_path()
@@ -260,7 +266,8 @@ def query_index(
     # Load config
     ctx, effective = ConfigLoader.load_effective_config(
         Path("."),
-        product=product
+        product=product,
+        profile=profile,
     )
     pc = ConfigLoader.validate_pipeline_config(effective)
     
@@ -355,10 +362,11 @@ def query_index(
         typer.echo()
         
         for i, result in enumerate(search_results, 1):
+            preview: str = result.text or ""
             typer.echo(f"## Result {i} (score: {result.score:.4f})")
             typer.echo(f"- chunk_id: {result.chunk_id}")
             typer.echo(f"- source_id: {result.metadata.get('source_id', 'unknown')}")
-            typer.echo(f"- text: {result.text[:200]}{'...' if len(result.text) > 200 else ''}")
+            typer.echo(f"- text: {preview[:200]}{'...' if len(preview) > 200 else ''}")
             typer.echo()
             
     except Exception as e:
@@ -371,6 +379,7 @@ def index_status(
     product: str = typer.Option("kano-agent-backlog-skill", "--product", help="Product name"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
 ):
     """Show embedding index status and metadata."""
     ensure_core_on_path()
@@ -382,7 +391,8 @@ def index_status(
     # Load config
     ctx, effective = ConfigLoader.load_effective_config(
         Path("."),
-        product=product
+        product=product,
+        profile=profile,
     )
     pc = ConfigLoader.validate_pipeline_config(effective)
     
@@ -411,8 +421,7 @@ def index_status(
     backend.load()  # Load existing index
     
     try:
-        # Get index statistics
-        stats = backend.get_stats()
+        stats: dict[str, object] = {}
         
         if output_format == "json":
             payload = {

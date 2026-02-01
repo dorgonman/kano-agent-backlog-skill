@@ -14,6 +14,9 @@ from ..util import ensure_core_on_path, get_global_config_file
 
 app = typer.Typer(help="Configuration inspection and validation")
 
+profiles_app = typer.Typer(help="Named config profiles (file-based overrides)")
+app.add_typer(profiles_app, name="profiles")
+
 
 def _validate_required_fields(cfg: dict[str, Any]) -> list[str]:
     errors: list[str] = []
@@ -143,6 +146,47 @@ def _next_backup_path(json_path: Path) -> Path:
     return candidate
 
 
+@profiles_app.command("list")
+def profiles_list(
+    path: Path = typer.Option(Path("."), "--path", help="Resource path to resolve config from"),
+    product: Optional[str] = typer.Option(None, "--product", help="Product name (optional)"),
+):
+    """List available profile names."""
+    ensure_core_on_path()
+    from kano_backlog_core.config import ConfigLoader
+
+    ctx = ConfigLoader.from_path(path, product=product)
+    root = ConfigLoader.get_profiles_root(ctx.backlog_root)
+    if not root.exists():
+        typer.echo("No profiles directory found")
+        typer.echo(f"Expected: {root}")
+        raise typer.Exit(0)
+
+    names = sorted(p.stem for p in root.glob("*.toml") if p.is_file())
+    if not names:
+        typer.echo("No profiles found")
+        typer.echo(f"Directory: {root}")
+        raise typer.Exit(0)
+
+    for name in names:
+        typer.echo(name)
+
+
+@profiles_app.command("show")
+def profiles_show(
+    name: str = typer.Argument(..., help="Profile name (without .toml)"),
+    path: Path = typer.Option(Path("."), "--path", help="Resource path to resolve config from"),
+    product: Optional[str] = typer.Option(None, "--product", help="Product name (optional)"),
+):
+    """Show the parsed profile config as JSON."""
+    ensure_core_on_path()
+    from kano_backlog_core.config import ConfigLoader
+
+    ctx = ConfigLoader.from_path(path, product=product)
+    overrides = ConfigLoader.load_profile_overrides(ctx.backlog_root, profile=name)
+    typer.echo(json.dumps({"name": name, "overrides": overrides}, indent=2, default=str))
+
+
 
 @app.command("pipeline")
 def config_pipeline(
@@ -151,6 +195,7 @@ def config_pipeline(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
 ):
     """Inspect effective embedding pipeline configuration."""
     ensure_core_on_path()
@@ -162,7 +207,8 @@ def config_pipeline(
             product=product,
             sandbox=sandbox,
             agent=agent,
-            topic=topic
+            topic=topic,
+            profile=profile,
         )
         
         typer.echo(f"Context: Product={ctx.product_name} Topic={topic or 'None'}")
@@ -187,6 +233,7 @@ def config_show(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
 ):
     """Print effective merged config as JSON (includes compiled backend URIs)."""
@@ -202,6 +249,7 @@ def config_show(
         sandbox=sandbox,
         agent=agent,
         topic=topic,
+        profile=profile,
         workset_item_id=workset_item_id,
         custom_config_file=custom_config_file,
     )
@@ -222,6 +270,7 @@ def config_export(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
     format: str = typer.Option("toml", "--format", case_sensitive=False, help="Output format: toml|json"),
     out: Optional[Path] = typer.Option(None, "--out", help="Output file path (REQUIRED: no default to avoid file accumulation)"),
@@ -244,6 +293,7 @@ def config_export(
             sandbox=sandbox,
             agent=agent,
             topic=topic,
+            profile=profile,
             workset_item_id=workset_item_id,
         )
     except ConfigError as e:
@@ -278,6 +328,7 @@ def config_validate(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
 ):
     """Validate layered config; exit 0 if ok, 1 otherwise."""
@@ -292,6 +343,7 @@ def config_validate(
             sandbox=sandbox,
             agent=agent,
             topic=topic,
+            profile=profile,
             workset_item_id=workset_item_id,
         )
     except ConfigError as e:
@@ -318,6 +370,7 @@ def config_init(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
     prefix: Optional[str] = typer.Option(None, "--prefix", help="Override product prefix (default: derived)"),
     force: bool = typer.Option(False, "--force", help="Overwrite existing config.toml if present"),
@@ -335,6 +388,7 @@ def config_init(
             sandbox=sandbox,
             agent=agent,
             topic=topic,
+            profile=profile,
             workset_item_id=workset_item_id,
         )
     except ConfigError as e:
@@ -371,6 +425,7 @@ def config_init(
             sandbox=sandbox,
             agent=agent,
             topic=topic,
+            profile=profile,
             workset_item_id=workset_item_id,
         )
         out_path = _default_auto_export_path(ctx2, "toml", topic, workset_item_id)
