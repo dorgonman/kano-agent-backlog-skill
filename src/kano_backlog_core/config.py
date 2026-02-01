@@ -8,7 +8,7 @@ Layer order (later wins):
 2) _kano/backlog/_shared/defaults.toml (preferred) or defaults.json (deprecated)
 3) .kano/backlog_config.toml (project-level defaults + shared)
 4) Product settings from .kano/backlog_config.toml [products.<name>] (flattened keys)
-5) Optional profile override: _kano/backlog/_shared/profiles/<profile>.toml
+5) Optional profile override: .kano/backlog_config/<profile>.toml (supports subfolders)
 6) Topic overrides: _kano/backlog/topics/<topic>/config.toml (optional)
 7) Workset overrides: _kano/backlog/.cache/worksets/items/<item_id>/config.toml (optional)
 
@@ -20,6 +20,7 @@ _kano/backlog/.cache/worksets/active_topic.<agent>.txt
 
 import json
 import logging
+import re
 import warnings
 from pathlib import Path
 from typing import Any, Optional
@@ -141,31 +142,126 @@ class ConfigLoader:
         return backlog_root / ".cache" / "worksets"
 
     @staticmethod
-    def get_profiles_root(backlog_root: Path) -> Path:
-        return backlog_root / "_shared" / "profiles"
+    def get_profiles_root(project_root: Path) -> Path:
+        """Return the project-level profiles root.
+
+        Profiles are intentionally *project-scoped* (adjacent to
+        `.kano/backlog_config.toml`), not backlog-scoped.
+        """
+
+        return project_root / ".kano" / "backlog_config"
 
     @staticmethod
-    def _validate_profile_name(profile: str) -> str:
-        name = profile.strip()
-        if not name:
+    def _try_existing_profile_path(project_root: Path, profile: str) -> Optional[Path]:
+        """Return a resolved path if the profile argument matches an existing file.
+
+        Path-first semantics:
+        - Always try absolute path and repo-root relative path candidates.
+        - If a file exists there, use it.
+        - Otherwise, caller can fall back to shorthand resolution.
+        """
+
+        raw = profile.strip()
+        if not raw:
+            return None
+
+        p = Path(raw)
+        candidates: list[Path] = []
+        if p.is_absolute():
+            candidates.append(p)
+            if p.suffix == "":
+                candidates.append(p.with_suffix(".toml"))
+        else:
+            # Avoid traversal attempts when interpreting as repo-relative.
+            if ".." in p.parts:
+                raise ConfigError(f"invalid profile path: {profile!r}")
+            base = project_root / p
+            candidates.append(base)
+            if base.suffix == "":
+                candidates.append(base.with_suffix(".toml"))
+
+        for c in candidates:
+            # Only enforce repo-root containment for repo-relative inputs.
+            if not c.is_absolute() or not p.is_absolute():
+                resolved = c.resolve()
+                try:
+                    resolved.relative_to(project_root.resolve())
+                except Exception:
+                    raise ConfigError(
+                        f"profile path escapes project root: {profile!r} ({resolved})"
+                    )
+            else:
+                resolved = c.resolve()
+
+            if not resolved.exists():
+                continue
+            if resolved.is_dir():
+                raise ConfigError(f"profile path is a directory: {profile!r} ({resolved})")
+            if resolved.suffix.lower() != ".toml":
+                raise ConfigError(
+                    f"profile path must point to a .toml file: {profile!r} ({resolved})"
+                )
+            return resolved
+
+        return None
+
+    @staticmethod
+    def _validate_profile_ref(profile: str) -> str:
+        """Validate a profile reference.
+
+        Allows folder organization via safe relative paths:
+        - OK: "usage", "embedding/local-noop", "logging/debug"
+        - Not OK: "../secrets", "/abs/path", ".hidden", "a/..", "a//b"
+        """
+
+        raw = profile.strip()
+        if not raw:
             raise ConfigError("profile name must be non-empty")
-        if "/" in name or "\\" in name or name.startswith("."):
-            raise ConfigError(f"invalid profile name: {profile!r}")
-        return name
+
+        normalized = raw.replace("\\", "/").strip("/")
+        if not normalized:
+            raise ConfigError("profile name must be non-empty")
+
+        parts = normalized.split("/")
+        for part in parts:
+            if not part or part in {".", ".."}:
+                raise ConfigError(f"invalid profile name: {profile!r}")
+            if part.startswith("."):
+                raise ConfigError(f"invalid profile name: {profile!r}")
+            # Keep it filesystem-safe and ASCII-ish.
+            if not re.fullmatch(r"[A-Za-z0-9._-]+", part):
+                raise ConfigError(f"invalid profile name: {profile!r}")
+
+        return normalized
 
     @staticmethod
-    def load_profile_overrides(backlog_root: Path, *, profile: Optional[str] = None) -> dict[str, Any]:
+    def load_profile_overrides(project_root: Path, *, profile: Optional[str] = None) -> dict[str, Any]:
         if not profile:
             return {}
-        name = ConfigLoader._validate_profile_name(profile)
-        profiles_root = ConfigLoader.get_profiles_root(backlog_root)
-        config_path = profiles_root / f"{name}.toml"
-        if not config_path.exists():
-            available: list[str] = []
-            if profiles_root.exists():
-                available = sorted(p.stem for p in profiles_root.glob("*.toml") if p.is_file())
-            hint = f" Available: {', '.join(available)}" if available else " No profiles found."
-            raise ConfigError(f"Profile not found: {name!r} ({config_path}).{hint}")
+
+        config_path: Path
+        existing_path = ConfigLoader._try_existing_profile_path(project_root, profile)
+        if existing_path is not None:
+            config_path = existing_path
+        else:
+            name = ConfigLoader._validate_profile_ref(profile)
+            profiles_root = ConfigLoader.get_profiles_root(project_root)
+            rel_parts = name.split("/")
+            config_path = profiles_root.joinpath(*rel_parts).with_suffix(".toml")
+            if not config_path.exists():
+                available: list[str] = []
+                if profiles_root.exists():
+                    for p in sorted(profiles_root.rglob("*.toml")):
+                        if not p.is_file():
+                            continue
+                        rel = p.relative_to(profiles_root).with_suffix("")
+                        available.append(str(rel).replace("\\", "/"))
+                hint = (
+                    f" Available: {', '.join(available)}"
+                    if available
+                    else " No profiles found."
+                )
+                raise ConfigError(f"Profile not found: {name!r} ({config_path}).{hint}")
 
         data = ConfigLoader._read_toml_optional(config_path)
         if not isinstance(data, dict):
@@ -528,7 +624,7 @@ class ConfigLoader:
             resource_path, ctx.product_name, custom_config_file
         )
 
-        profile_cfg = ConfigLoader.load_profile_overrides(ctx.backlog_root, profile=profile)
+        profile_cfg = ConfigLoader.load_profile_overrides(ctx.project_root, profile=profile)
         
         topic_cfg = ConfigLoader.load_topic_overrides(ctx.backlog_root, topic=topic, agent=agent)
         workset_cfg = ConfigLoader.load_workset_overrides(ctx.backlog_root, item_id=workset_item_id)

@@ -75,6 +75,7 @@ def search_similar(
         "provider": pc.embedding.provider,
         "model": pc.embedding.model,
         "dimension": pc.embedding.dimension,
+        **pc.embedding.options,
     }
     embedder = resolve_embedder(embed_cfg)
     
@@ -160,7 +161,6 @@ def search_hybrid(
         query=query_text,
         k=fts_k,
         snippet_tokens=snippet_tokens,
-        cache_root=cache_root
     )
     if not candidates:
         return []
@@ -175,6 +175,7 @@ def search_hybrid(
         "provider": pc.embedding.provider,
         "model": pc.embedding.model,
         "dimension": pc.embedding.dimension,
+        **pc.embedding.options,
     }
     embedder = resolve_embedder(embed_cfg)
     query_embeddings = embedder.embed_batch([query_text])

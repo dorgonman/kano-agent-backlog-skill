@@ -57,7 +57,8 @@ def build_index(
         # Load config
         ctx, effective = ConfigLoader.load_effective_config(
             Path("."),
-            product=product
+            product=product,
+            profile=profile,
         )
         pc = ConfigLoader.validate_pipeline_config(effective)
         
@@ -127,7 +128,8 @@ def build_index(
         # Load config
         ctx, effective = ConfigLoader.load_effective_config(
             Path("."),
-            product=product
+            product=product,
+            profile=profile,
         )
         pc = ConfigLoader.validate_pipeline_config(effective)
         

@@ -635,10 +635,18 @@ _kano/backlog/.cache/worksets/items/<ITEM_ID>/
 
 ### Named profiles (pipeline experiments)
 
-- Profiles are file-based overrides stored at: `_kano/backlog/_shared/profiles/<profile>.toml`
-- Use `--profile <profile>` on commands like:
-  - `kano-backlog config show --product <product> --profile <profile>`
-  - `kano-backlog embedding build --product <product> --profile <profile>`
+- Profiles are file-based overrides stored at: `.kano/backlog_config/<profile>.toml` (supports subfolders)
+- `--profile` supports two forms:
+  - **Path mode (recommended)**: repo-root relative or absolute path to a `.toml` file
+    - `--profile .kano/backlog_config/embedding/local-noop.toml`
+  - **Shorthand mode**: profile ref resolved under `.kano/backlog_config/`
+    - `--profile embedding/local-noop`
+- Ambiguity rule: the CLI will first check whether the `--profile` value matches an existing
+  file path (absolute or repo-root relative, with optional `.toml` suffix). If no such file
+  exists, it falls back to shorthand resolution under `.kano/backlog_config/`.
+- Use `--profile ...` on commands like:
+  - `kano-backlog config show --product <product> --profile .kano/backlog_config/embedding/local-noop.toml`
+  - `kano-backlog embedding build --product <product> --profile embedding/local-noop`
 - List and inspect profiles:
   - `kano-backlog config profiles list --product <product>`
   - `kano-backlog config profiles show <profile> --product <product>`

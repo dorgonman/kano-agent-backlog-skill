@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -22,6 +23,16 @@ def _dumps_deterministic(obj: Any) -> str:
 
 def _sha256_hex(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _slugify(value: str) -> str:
+    """Return a filesystem-safe ASCII slug."""
+    v = value.strip()
+    if not v:
+        return "unknown"
+    v = re.sub(r"[^A-Za-z0-9._-]+", "-", v)
+    v = re.sub(r"-+", "-", v).strip("-")
+    return v or "unknown"
 
 
 @dataclass(frozen=True)
@@ -107,11 +118,17 @@ def run_benchmark(
     *,
     product: str,
     agent: str,
+    profile: Optional[str] = None,
     corpus_path: Path,
     queries_path: Path,
     options: BenchmarkHarnessOptions,
 ) -> Tuple[Dict[str, Any], BenchmarkRunPaths]:
-    ctx, effective = ConfigLoader.load_effective_config(Path("."), product=product, agent=agent)
+    ctx, effective = ConfigLoader.load_effective_config(
+        Path("."),
+        product=product,
+        agent=agent,
+        profile=profile,
+    )
     pc = ConfigLoader.validate_pipeline_config(effective)
 
     corpus = load_benchmark_corpus(corpus_path)
@@ -119,12 +136,16 @@ def run_benchmark(
 
     corpus_fingerprint = fingerprint_corpus_and_queries(corpus, queries)
 
+    embedding_id = _slugify(
+        f"{pc.embedding.provider}-{pc.embedding.model}-d{pc.embedding.dimension}"
+    )
+
     output_dir = options.output_dir
     if output_dir is None:
-        # Default under product artifacts, deterministic path keyed by corpus fingerprint.
-        output_dir = ctx.product_root / "artifacts" / "KABSD-TSK-0261" / "runs" / corpus_fingerprint[:12]
+        item_id = options.attach_item_id or "BENCHMARK"
+        output_dir = ctx.product_root / "artifacts" / item_id / "runs"
 
-    run_dir = Path(output_dir)
+    run_dir = Path(output_dir) / corpus_fingerprint[:12] / embedding_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
     tokenizer = resolve_tokenizer(pc.tokenizer.adapter, pc.tokenizer.model, max_tokens=pc.tokenizer.max_tokens)
@@ -175,13 +196,19 @@ def run_benchmark(
     embedding_summary: Dict[str, Any] = {"ran": False}
     vector_summary: Dict[str, Any] = {"ran": False}
 
+    embed_cfg: Dict[str, Any] = {
+        "provider": pc.embedding.provider,
+        "model": pc.embedding.model,
+        "dimension": pc.embedding.dimension,
+        "options": dict(pc.embedding.options) if isinstance(pc.embedding.options, dict) else {},
+    }
+    if isinstance(pc.embedding.options, dict):
+        # Allow provider-specific keys to be expressed either as [embedding.options] or
+        # as direct keys expected by resolve_embedder (e.g. api_key/base_url).
+        embed_cfg = {**embed_cfg, **pc.embedding.options}
+
     embedded_vectors: Dict[str, List[float]] = {}
     if include_embedding:
-        embed_cfg = {
-            "provider": pc.embedding.provider,
-            "model": pc.embedding.model,
-            "dimension": pc.embedding.dimension,
-        }
         embedder = resolve_embedder(embed_cfg)
 
         # Deterministic batch order
@@ -245,13 +272,7 @@ def run_benchmark(
         query_total = 0
         for q in queries:
             query_total += 1
-            q_vec_res = resolve_embedder(
-                {
-                    "provider": pc.embedding.provider,
-                    "model": pc.embedding.model,
-                    "dimension": pc.embedding.dimension,
-                }
-            ).embed_batch([q.text])
+            q_vec_res = resolve_embedder(embed_cfg).embed_batch([q.text])
             q_vec = q_vec_res[0].vector
             res = backend.query(q_vec, k=options.top_k)
             got_source_ids = sorted({r.metadata.get("source_id", "") for r in res if r.metadata})

@@ -296,6 +296,7 @@ def build_vector_index(
         "provider": pc.embedding.provider,
         "model": pc.embedding.model,
         "dimension": pc.embedding.dimension,
+        **pc.embedding.options,
     }
     embedder = resolve_embedder(embed_cfg)
     

@@ -78,6 +78,7 @@ dimension = 1536            # Vector dimension
 - **provider** (string, default: "noop"): Embedding service provider
   - `"noop"`: Testing provider that generates random vectors
   - `"openai"`: OpenAI embedding API
+  - `"sentence-transformers"`: Local embeddings via HuggingFace sentence-transformers (optional dependency)
 - **model** (string): Model identifier for embedding generation
 - **dimension** (integer, default: 1536): Vector dimension size
 
@@ -91,6 +92,10 @@ dimension = 1536            # Vector dimension
 - `text-embedding-3-large`: 3072 dimensions  
 - `text-embedding-ada-002`: 1536 dimensions
 
+**sentence-transformers Provider** (local):
+- Model IDs like `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
+- Or a local directory path containing a downloaded model (no network)
+
 ### Additional Options
 
 Provider-specific options can be added under `[embedding.options]`:
@@ -100,7 +105,24 @@ Provider-specific options can be added under `[embedding.options]`:
 api_key = "sk-..."          # OpenAI API key (for openai provider)
 base_url = "https://..."    # Custom API endpoint
 timeout = 30                # Request timeout in seconds
+
+# sentence-transformers options (for sentence-transformers provider)
+device = "cpu"              # Optional; defaults to sentence-transformers behavior
+batch_size = 32              # Optional
+normalize_embeddings = false # Optional
+max_seq_length = 256         # Optional
 ```
+
+### Caching and offline mode
+
+sentence-transformers uses HuggingFace Hub caching. Useful environment variables:
+
+- `HF_HOME`: root cache directory
+- `SENTENCE_TRANSFORMERS_HOME`: sentence-transformers cache root
+- `TRANSFORMERS_CACHE`: transformers cache (legacy)
+- `HF_HUB_OFFLINE=1` and/or `TRANSFORMERS_OFFLINE=1`: force offline mode
+
+If you want fully offline runs, download the model once, then point `embedding.model` at the local model directory.
 
 ## [vector] Section
 

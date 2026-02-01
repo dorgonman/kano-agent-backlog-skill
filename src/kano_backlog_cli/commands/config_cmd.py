@@ -156,13 +156,18 @@ def profiles_list(
     from kano_backlog_core.config import ConfigLoader
 
     ctx = ConfigLoader.from_path(path, product=product)
-    root = ConfigLoader.get_profiles_root(ctx.backlog_root)
+    root = ConfigLoader.get_profiles_root(ctx.project_root)
     if not root.exists():
         typer.echo("No profiles directory found")
         typer.echo(f"Expected: {root}")
         raise typer.Exit(0)
 
-    names = sorted(p.stem for p in root.glob("*.toml") if p.is_file())
+    names: list[str] = []
+    for p in sorted(root.rglob("*.toml")):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(root).with_suffix("")
+        names.append(str(rel).replace("\\", "/"))
     if not names:
         typer.echo("No profiles found")
         typer.echo(f"Directory: {root}")
@@ -183,7 +188,7 @@ def profiles_show(
     from kano_backlog_core.config import ConfigLoader
 
     ctx = ConfigLoader.from_path(path, product=product)
-    overrides = ConfigLoader.load_profile_overrides(ctx.backlog_root, profile=name)
+    overrides = ConfigLoader.load_profile_overrides(ctx.project_root, profile=name)
     typer.echo(json.dumps({"name": name, "overrides": overrides}, indent=2, default=str))
 
 
@@ -195,7 +200,11 @@ def config_pipeline(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+    ),
 ):
     """Inspect effective embedding pipeline configuration."""
     ensure_core_on_path()
@@ -233,7 +242,11 @@ def config_show(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+    ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
 ):
     """Print effective merged config as JSON (includes compiled backend URIs)."""
@@ -270,7 +283,11 @@ def config_export(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+    ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
     format: str = typer.Option("toml", "--format", case_sensitive=False, help="Output format: toml|json"),
     out: Optional[Path] = typer.Option(None, "--out", help="Output file path (REQUIRED: no default to avoid file accumulation)"),
@@ -328,7 +345,11 @@ def config_validate(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+    ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
 ):
     """Validate layered config; exit 0 if ok, 1 otherwise."""
@@ -370,7 +391,11 @@ def config_init(
     sandbox: Optional[str] = typer.Option(None, "--sandbox", help="Sandbox name (optional)"),
     agent: Optional[str] = typer.Option(None, "--agent", help="Agent name for topic lookup"),
     topic: Optional[str] = typer.Option(None, "--topic", help="Explicit topic name"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+    ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
     prefix: Optional[str] = typer.Option(None, "--prefix", help="Override product prefix (default: derived)"),
     force: bool = typer.Option(False, "--force", help="Overwrite existing config.toml if present"),

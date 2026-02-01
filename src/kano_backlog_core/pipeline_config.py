@@ -138,7 +138,7 @@ class PipelineConfig:
             "provider": self.embedding.provider,
             "model": self.embedding.model,
             "dimension": self.embedding.dimension,
-            **self.embedding.options
+            **self.embedding.options,
         }
         try:
             resolve_embedder(e_config)

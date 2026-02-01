@@ -12,6 +12,16 @@ app = typer.Typer(help="Deterministic benchmark harness")
 def run(
     product: str = typer.Option("kano-agent-backlog-skill", "--product", help="Product name"),
     agent: str = typer.Option(..., "--agent", help="Agent id (for topic overrides)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+    ),
+    item_id: Optional[str] = typer.Option(
+        None,
+        "--item-id",
+        help="Backlog item id for default artifact output path",
+    ),
     corpus: Path = typer.Option(
         Path("skills/kano-agent-backlog-skill/tests/fixtures/benchmark_corpus.json"),
         "--corpus",
@@ -43,11 +53,13 @@ def run(
         include_vector=include_vector,
         top_k=top_k,
         output_dir=out_dir,
+        attach_item_id=item_id,
     )
 
     report, paths = run_benchmark(
         product=product,
         agent=agent,
+        profile=profile,
         corpus_path=corpus,
         queries_path=queries,
         options=options,
