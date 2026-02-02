@@ -1,0 +1,13 @@
+# Built-in embedding profile: local no-op
+
+[embedding]
+provider = "noop"
+model = "noop-embedding"
+dimension = 1536
+
+[vector]
+enabled = false
+backend = "noop"
+
+[analysis.llm]
+enabled = false

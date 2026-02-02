@@ -1,0 +1,18 @@
+# Built-in embedding profile: OpenAI text-embedding-3-small
+# Requires: set OPENAI_API_KEY in your environment.
+
+[embedding]
+provider = "openai"
+model = "text-embedding-3-small"
+dimension = 1536
+api_key = "env:OPENAI_API_KEY"
+
+[vector]
+enabled = true
+backend = "sqlite"
+path = ".kano/cache/backlog/vector"
+collection = "backlog"
+metric = "cosine"
+
+[cache]
+root = ".kano/cache/backlog"

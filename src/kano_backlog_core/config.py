@@ -153,6 +153,18 @@ class ConfigLoader:
         return project_root / ".kano" / "backlog_config"
 
     @staticmethod
+    def get_skill_profiles_root() -> Path:
+        """Return the skill-shipped profiles root.
+
+        Profiles shipped with the skill provide official defaults that work out of the box.
+        Project profiles under .kano/backlog_config always take precedence.
+        """
+
+        # <skill_root>/src/kano_backlog_core/config.py -> <skill_root>
+        return Path(__file__).resolve().parents[2] / "profiles"
+
+
+    @staticmethod
     def _try_existing_profile_path(project_root: Path, profile: str) -> Optional[Path]:
         """Return a resolved path if the profile argument matches an existing file.
 
@@ -246,22 +258,31 @@ class ConfigLoader:
             config_path = existing_path
         else:
             name = ConfigLoader._validate_profile_ref(profile)
-            profiles_root = ConfigLoader.get_profiles_root(project_root)
             rel_parts = name.split("/")
-            config_path = profiles_root.joinpath(*rel_parts).with_suffix(".toml")
+
+            project_profiles_root = ConfigLoader.get_profiles_root(project_root)
+            skill_profiles_root = ConfigLoader.get_skill_profiles_root()
+
+            candidates = [
+                project_profiles_root.joinpath(*rel_parts).with_suffix(".toml"),
+                skill_profiles_root.joinpath(*rel_parts).with_suffix(".toml"),
+            ]
+
+            config_path = next((p for p in candidates if p.exists()), candidates[0])
             if not config_path.exists():
                 available: list[str] = []
-                if profiles_root.exists():
-                    for p in sorted(profiles_root.rglob("*.toml")):
+                for root in (project_profiles_root, skill_profiles_root):
+                    if not root.exists():
+                        continue
+                    for p in sorted(root.rglob("*.toml")):
                         if not p.is_file():
                             continue
-                        rel = p.relative_to(profiles_root).with_suffix("")
-                        available.append(str(rel).replace("\\", "/"))
-                hint = (
-                    f" Available: {', '.join(available)}"
-                    if available
-                    else " No profiles found."
-                )
+                        rel = p.relative_to(root).with_suffix("")
+                        available.append(str(rel).replace("\\\\", "/"))
+                seen = set()
+                available = [a for a in available if not (a in seen or seen.add(a))]
+                joined = ", ".join(available)
+                hint = f" Available: {joined}" if available else " No profiles found."
                 raise ConfigError(f"Profile not found: {name!r} ({config_path}).{hint}")
 
         data = ConfigLoader._read_toml_optional(config_path)
@@ -647,7 +668,6 @@ class ConfigLoader:
         profile: Optional[str] = None,
         workset_item_id: Optional[str] = None,
         custom_config_file: Optional[Path] = None,
-        profile: Optional[str] = None,
     ) -> tuple[BacklogContext, dict[str, Any]]:
         """Return (context, effective_config) using the layered merge order.
         
@@ -678,14 +698,7 @@ class ConfigLoader:
             resource_path, ctx.product_name, custom_config_file
         )
 
-        profile_cfg = ConfigLoader.load_profile_overrides(ctx.project_root, profile=profile)
-        
-        topic_cfg = ConfigLoader.load_topic_overrides(ctx.backlog_root, topic=topic, agent=agent)
-        workset_cfg = ConfigLoader.load_workset_overrides(ctx.backlog_root, item_id=workset_item_id)
-        # Profile selection can be supplied via:
-        # - CLI arg (profile=...)
-        # - env var KANO_BACKLOG_PROFILE (set by CLI callback)
-        # - repo defaults/shared (e.g., [defaults].profile or [shared.profiles].active)
+        # Resolve profile selection (CLI arg -> env var -> repo defaults)
         resolved_profile = (profile or os.environ.get("KANO_BACKLOG_PROFILE") or "").strip() or None
         if not resolved_profile:
             candidate = project_cfg.get("profile")
@@ -698,11 +711,11 @@ class ConfigLoader:
                     if isinstance(active, str) and active.strip():
                         resolved_profile = active.strip()
 
-        profile_cfg = ConfigLoader.load_profile_overrides(
-            resource_path,
-            profile=resolved_profile,
-            custom_config_file=custom_config_file,
-        )
+        profile_cfg = ConfigLoader.load_profile_overrides(ctx.project_root, profile=resolved_profile)
+        topic_cfg = ConfigLoader.load_topic_overrides(ctx.backlog_root, topic=topic, agent=agent)
+        workset_cfg = ConfigLoader.load_workset_overrides(ctx.backlog_root, item_id=workset_item_id)
+
+
 
         # Merge layers in precedence order (system defaults first, then user configs)
         effective: dict[str, Any] = {}
@@ -729,3 +742,5 @@ class ConfigLoader:
         pc = PipelineConfig.from_dict(config)
         pc.validate()
         return pc
+
+

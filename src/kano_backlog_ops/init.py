@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from datetime import datetime
 import tomli_w
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,16 +67,17 @@ def init_backlog(
         raise ValueError("Product name cannot be empty")
     actual_prefix = (prefix or item_utils.derive_prefix(actual_product_name)).upper()
 
-    config_path = _write_config(
-        product_root=product_root,
-        agent=agent,
+    project_root = _resolve_project_root(backlog_root_path)
+    config_path, config_created = _upsert_project_backlog_config(
+        project_root=project_root,
+        product=normalized_product,
         product_name=actual_product_name,
         prefix=actual_prefix,
-        persona=persona,
-        skill_developer=skill_developer,
+        backlog_root=str(_relativize(product_root, project_root)),
+        agent=agent,
         force=force,
     )
-    if config_path not in created_paths:
+    if config_created:
         created_paths.append(config_path)
 
     views_refreshed: List[Path] = []
@@ -96,7 +99,6 @@ def init_backlog(
     if create_guides:
         guides_updated = _update_guides(backlog_root_path)
 
-    project_root = _resolve_project_root(backlog_root_path)
     context = BacklogContext(
         project_root=project_root,
         backlog_root=backlog_root_path,
@@ -129,11 +131,7 @@ def check_initialized(
 
     if product:
         target = backlog_root_path / "products" / _normalize_product_name(product)
-        return (target / "_config" / "config.toml").exists() or (target / "_config" / "config.json").exists()
-
-    # Platform-level check: either root config or at least one product config exists.
-    if (backlog_root_path / "_config" / "config.toml").exists() or (backlog_root_path / "_config" / "config.json").exists():
-        return True
+        return (target / "items").exists() and (target / "views").exists()
 
     products_root = backlog_root_path / "products"
     if not products_root.exists():
@@ -142,8 +140,7 @@ def check_initialized(
     for candidate in products_root.iterdir():
         if not candidate.is_dir():
             continue
-        config_dir = candidate / "_config"
-        if (config_dir / "config.toml").exists() or (config_dir / "config.json").exists():
+        if (candidate / "items").exists():
             return True
     return False
 
@@ -155,9 +152,7 @@ def _create_scaffold(product_root: Path) -> List[Path]:
         product_root / "decisions",
         product_root / "views",
         product_root / "items",
-        product_root / "_config",
         product_root / "_meta",
-        product_root / ".cache",
         product_root / "artifacts",
     ]
 
@@ -177,42 +172,65 @@ def _create_scaffold(product_root: Path) -> List[Path]:
     return created
 
 
-def _write_config(
+def _upsert_project_backlog_config(
     *,
-    product_root: Path,
-    agent: str,
+    project_root: Path,
+    product: str,
     product_name: str,
     prefix: str,
-    persona: str,
-    skill_developer: bool,
+    backlog_root: str,
+    agent: str,
     force: bool,
-) -> Path:
-    config_dir = product_root / "_config"
-    config_path = config_dir / "config.toml"
-    if config_path.exists() and not force:
-        raise FileExistsError(f"Config already exists: {config_path}")
+) -> tuple[Path, bool]:
+    """Ensure the project-level .kano/backlog_config.toml contains this product."""
+    kano_dir = project_root / ".kano"
+    kano_dir.mkdir(parents=True, exist_ok=True)
+    config_path = kano_dir / "backlog_config.toml"
+    created = False
 
-    config_dir.mkdir(parents=True, exist_ok=True)
-    payload: Dict[str, object] = {
-        "mode": {
-            "skill_developer": bool(skill_developer),
-            "persona": persona or "developer",
-        },
-        "product": {
-            "name": product_name,
-            "prefix": prefix,
-        },
-        "views": {"auto_refresh": True},
-        "log": {"verbosity": "warning", "debug": False},
-        "process": {"profile": "", "path": ""},
-        "sandbox": {"root": "_kano/backlog_sandbox"},
-        "index": {"enabled": True, "backend": "sqlite", "path": "", "mode": "rebuild"},
-        "analysis": {"llm": {"enabled": False}},
-        "_comment": f"Initialized by {agent} via kano-backlog admin init.",
-    }
+    header = (
+        "# Project-Level Backlog Configuration\n"
+        "# This file is source-of-truth and should be committed.\n\n"
+        "[defaults]\n"
+        "auto_refresh = true\n"
+        "skill_developer = false\n\n"
+        "[shared.cache]\n"
+        "root = \".kano/cache/backlog\"\n\n"
+        "[shared.vector]\n"
+        "enabled = true\n"
+        "backend = \"sqlite\"\n"
+        "path = \".kano/cache/backlog/vector\"\n"
+        "collection = \"backlog\"\n"
+        "metric = \"cosine\"\n\n"
+    )
 
-    config_path.write_text(tomli_w.dumps(payload), encoding="utf-8")
-    return config_path
+    if not config_path.exists():
+        config_path.write_text(header, encoding="utf-8")
+        created = True
+
+    text = config_path.read_text(encoding="utf-8")
+
+    # If product already exists, keep it unless force=true.
+    product_table = f"[products.{product}]"
+    if product_table in text and not force:
+        return config_path, created
+
+    # Best-effort remove old block when force=true to avoid duplicates.
+    if product_table in text and force:
+        pattern = rf"(?ms)^\[products\.{re.escape(product)}\]\s*$.*?(?=^\[|\Z)"
+        text = re.sub(pattern, "", text).rstrip() + "\n"
+
+    stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") + "Z"
+    block = (
+        f"\n# Added by kano-backlog admin init ({stamp}, agent={agent})\n"
+        f"[products.{product}]\n"
+        f"name = {json.dumps(product_name)}\n"
+        f"prefix = {json.dumps(prefix)}\n"
+        f"backlog_root = {json.dumps(backlog_root)}\n"
+    )
+
+    config_path.write_text(text.rstrip() + block, encoding="utf-8")
+    return config_path, True
 
 
 def _update_guides(backlog_root: Path) -> List[Path]:
@@ -342,3 +360,4 @@ def _relativize(path: Path, base: Path) -> str:
         return path.relative_to(base).as_posix()
     except ValueError:
         return path.as_posix()
+

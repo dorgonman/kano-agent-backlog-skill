@@ -1,0 +1,17 @@
+# Built-in embedding profile: local sentence-transformers (MiniLM)
+# Requires: pip install sentence-transformers
+
+[embedding]
+provider = "sentence-transformers"
+model = "sentence-transformers/all-MiniLM-L6-v2"
+dimension = 384
+
+[vector]
+enabled = true
+backend = "sqlite"
+path = ".kano/cache/backlog/vector"
+collection = "backlog"
+metric = "cosine"
+
+[cache]
+root = ".kano/cache/backlog"

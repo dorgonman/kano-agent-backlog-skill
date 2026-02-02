@@ -59,3 +59,4 @@ Thumbs.db
 .cache/
 .kano/vector/
 .kano/*.sqlite3
+*.bak
