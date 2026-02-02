@@ -29,7 +29,11 @@ def build_index(
     tokenizer_model: Optional[str] = typer.Option(None, "--tokenizer-model", help="Override tokenizer model name"),
     tokenizer_max_tokens: Optional[int] = typer.Option(None, "--tokenizer-max-tokens", help="Override max tokens for tokenizer"),
     tokenizer_config: Optional[Path] = typer.Option(None, "--tokenizer-config", help="Path to tokenizer configuration file"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (path or shorthand; path-first, fallback to .kano/backlog_config)",
+    ),
 ):
     """Build embedding index for files or full product."""
     ensure_core_on_path()
@@ -255,7 +259,11 @@ def query_index(
     tokenizer_adapter: Optional[str] = typer.Option(None, "--tokenizer-adapter", help="Tokenizer adapter (auto, heuristic, tiktoken, huggingface)"),
     tokenizer_model: Optional[str] = typer.Option(None, "--tokenizer-model", help="Override tokenizer model name"),
     tokenizer_config: Optional[Path] = typer.Option(None, "--tokenizer-config", help="Path to tokenizer configuration file"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (path or shorthand; path-first, fallback to .kano/backlog_config)",
+    ),
 ):
     """Query the embedding index for similar content."""
     ensure_core_on_path()
@@ -381,7 +389,11 @@ def index_status(
     product: str = typer.Option("kano-agent-backlog-skill", "--product", help="Product name"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
-    profile: Optional[str] = typer.Option(None, "--profile", help="Named config profile (optional)"),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Profile (path or shorthand; path-first, fallback to .kano/backlog_config)",
+    ),
 ):
     """Show embedding index status and metadata."""
     ensure_core_on_path()

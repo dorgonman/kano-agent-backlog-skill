@@ -19,6 +19,7 @@ src_dir = test_dir.parent / "src"
 sys.path.insert(0, str(src_dir))
 
 from kano_backlog_core.config import ConfigLoader
+from kano_backlog_core.errors import ConfigError
 
 
 def _mk_backlog(tmp: Path, *, products: list[str]) -> Path:
@@ -35,6 +36,17 @@ def _mk_backlog(tmp: Path, *, products: list[str]) -> Path:
             encoding="utf-8",
         )
 
+    # Required project-level config.
+    kano_dir = tmp / ".kano"
+    kano_dir.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    for product in products:
+        lines.append(f"[products.{product}]\n")
+        lines.append(f"name = \"{product}\"\n")
+        lines.append(f"prefix = \"{product[:3].upper()}\"\n")
+        lines.append(f"backlog_root = \"_kano/backlog/products/{product}\"\n\n")
+    (kano_dir / "backlog_config.toml").write_text("".join(lines), encoding="utf-8")
+
     return backlog_root
 
 
@@ -46,42 +58,36 @@ def _cleanup(tmp: Path) -> None:
     shutil.rmtree(tmp, ignore_errors=True)
 
 
-def test_from_path_uses_defaults_default_product_when_not_inferable():
+def test_from_path_requires_explicit_product_when_multiple_products_defined():
     tmp = _tmp_workspace()
     try:
-        backlog_root = _mk_backlog(tmp, products=["prod-a", "prod-b"])
-        (backlog_root / "_shared" / "defaults.toml").write_text(
-            "default_product = \"prod-b\"\n", encoding="utf-8"
-        )
+        _mk_backlog(tmp, products=["prod-a", "prod-b"])
 
-        ctx = ConfigLoader.from_path(tmp)
-        assert ctx.product_name == "prod-b"
-        assert ctx.product_root == backlog_root / "products" / "prod-b"
+        with pytest.raises(ConfigError):
+            ConfigLoader.from_path(tmp)
     finally:
         _cleanup(tmp)
 
 
-def test_from_path_topic_override_beats_defaults_when_agent_has_active_topic():
+def test_load_effective_config_applies_topic_overrides_when_agent_has_active_topic():
     tmp = _tmp_workspace()
     try:
-        backlog_root = _mk_backlog(tmp, products=["prod-a", "prod-b"])
-        (backlog_root / "_shared" / "defaults.toml").write_text(
-            "default_product = \"prod-b\"\n", encoding="utf-8"
-        )
+        backlog_root = _mk_backlog(tmp, products=["prod-a"])
+        (backlog_root / "_shared" / "defaults.toml").write_text("x = 1\n", encoding="utf-8")
 
         # Create topic config override and active topic marker for agent
         topic_name = "mytopic"
         topic_dir = backlog_root / "topics" / topic_name
         topic_dir.mkdir(parents=True, exist_ok=True)
         (topic_dir / "config.toml").write_text(
-            "default_product = \"prod-a\"\n", encoding="utf-8"
+            "x = 2\n", encoding="utf-8"
         )
         active_marker = backlog_root / ".cache" / "worksets" / "active_topic.copilot.txt"
         active_marker.parent.mkdir(parents=True, exist_ok=True)
         active_marker.write_text(topic_name, encoding="utf-8")
 
-        ctx = ConfigLoader.from_path(tmp, agent="copilot")
-        assert ctx.product_name == "prod-a"
+        _, cfg = ConfigLoader.load_effective_config(tmp, product="prod-a", agent="copilot")
+        assert cfg["x"] == 2
     finally:
         _cleanup(tmp)
 
@@ -130,5 +136,40 @@ def test_load_effective_config_layers_merge_in_order():
         assert cfg["x"] == 3
         assert cfg["views"]["auto_refresh"] is True
         assert cfg["views"]["mode"] == "workset"
+    finally:
+        _cleanup(tmp)
+
+
+def test_load_profile_overrides_path_first_then_fallback_to_shorthand():
+    tmp = _tmp_workspace()
+    try:
+        # Minimal project root with .kano/backlog_config.
+        profiles_root = tmp / ".kano" / "backlog_config" / "embedding"
+        profiles_root.mkdir(parents=True, exist_ok=True)
+        (profiles_root / "local-noop.toml").write_text("log_debug = true\n", encoding="utf-8")
+
+        # Also create a repo-root relative file at embedding/local-noop.toml.
+        # Path-first semantics should prefer this file over shorthand.
+        repo_rel = tmp / "embedding"
+        repo_rel.mkdir(parents=True, exist_ok=True)
+        (repo_rel / "local-noop.toml").write_text("log_debug = false\n", encoding="utf-8")
+
+        # Since repo-root relative file exists, it should be used (debug=false).
+        overrides = ConfigLoader.load_profile_overrides(tmp, profile="embedding/local-noop")
+        assert overrides["log"]["debug"] is False
+
+        # Explicit repo-root relative path should be used when it exists.
+        direct_path = tmp / ".kano" / "backlog_config" / "embedding" / "local-noop.toml"
+        overrides2 = ConfigLoader.load_profile_overrides(tmp, profile=str(direct_path))
+        assert overrides2["log"]["debug"] is True
+    finally:
+        _cleanup(tmp)
+
+
+def test_load_profile_overrides_rejects_traversal_paths():
+    tmp = _tmp_workspace()
+    try:
+        with pytest.raises(ConfigError):
+            ConfigLoader.load_profile_overrides(tmp, profile="../secrets")
     finally:
         _cleanup(tmp)

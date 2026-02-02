@@ -179,7 +179,10 @@ def profiles_list(
 
 @profiles_app.command("show")
 def profiles_show(
-    name: str = typer.Argument(..., help="Profile name (without .toml)"),
+    name: str = typer.Argument(
+        ...,
+        help="Profile shorthand (e.g. embedding/local-noop) or path (e.g. .kano/backlog_config/embedding/local-noop.toml)",
+    ),
     path: Path = typer.Option(Path("."), "--path", help="Resource path to resolve config from"),
     product: Optional[str] = typer.Option(None, "--product", help="Product name (optional)"),
 ):
