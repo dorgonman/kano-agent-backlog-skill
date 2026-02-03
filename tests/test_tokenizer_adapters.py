@@ -381,7 +381,10 @@ class TestHuggingFaceAdapter:
                 HuggingFaceAdapter(model_name)
                 pytest.fail(f"Invalid model name {model_name} was accepted")
             except (ValueError, ImportError) as e:
-                if isinstance(e, ValueError) and "Invalid HuggingFace model name format" in str(e):
+                if isinstance(e, ValueError) and (
+                    "Invalid HuggingFace model name format" in str(e)
+                    or "model_name must be non-empty" in str(e)
+                ):
                     continue  # Expected validation error
                 elif isinstance(e, ImportError):
                     # If transformers not available, we can't test validation

@@ -57,11 +57,9 @@ def _default_export_path(ctx, fmt: str, topic: Optional[str], workset_item_id: O
 
 
 def _default_auto_export_path(ctx, fmt: str, topic: Optional[str], workset_item_id: Optional[str]) -> Path:
-    # Auto-export writes effective_config to project-level .kano/debug/ (only in debug mode)
-    # This keeps the debug output in the project directory, not in the backlog directory
-    debug_dir = ctx.project_root / ".kano" / "debug"
-    debug_dir.mkdir(parents=True, exist_ok=True)
-    return debug_dir / f"backlog_config.{fmt}"
+    cache_dir = ctx.project_root / ".kano" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"effective_backlog_config.{fmt}"
 
 
 def _write_effective_config_artifact(
@@ -206,7 +204,7 @@ def config_pipeline(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
 ):
     """Inspect effective embedding pipeline configuration."""
@@ -248,7 +246,7 @@ def config_show(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
 ):
@@ -289,7 +287,7 @@ def config_export(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
     format: str = typer.Option("toml", "--format", case_sensitive=False, help="Output format: toml|json"),
@@ -322,7 +320,7 @@ def config_export(
 
     if not out:
         typer.echo("Error: --out is required. Specify output file path to avoid accumulating timestamped files.")
-        typer.echo("Hint: Use auto-export via 'view refresh' for a stable .kano/debug/backlog_config.toml (requires debug mode).")
+        typer.echo("Hint: Use auto-export via 'view refresh' for a stable .kano/cache/effective_backlog_config.toml.")
         raise typer.Exit(1)
 
     out_path = out
@@ -351,7 +349,7 @@ def config_validate(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
 ):
@@ -397,7 +395,7 @@ def config_init(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
     workset_item_id: Optional[str] = typer.Option(None, "--workset", help="Workset item id"),
     prefix: Optional[str] = typer.Option(None, "--prefix", help="Override product prefix (default: derived)"),
@@ -484,6 +482,74 @@ def config_migrate_json(
     from kano_backlog_core.config import ConfigLoader
     from kano_backlog_core.errors import ConfigError
 
+    def _legacy_ctx_from_path() -> "BacklogContext":
+        """Best-effort context resolver for legacy (pre-project-config) layouts.
+
+        This command exists to help migrate legacy JSON configs. Requiring a
+        project-level .kano/backlog_config.toml would make migration impossible
+        for new adopters, so we allow a legacy fallback.
+        """
+        from kano_backlog_core.config import BacklogContext
+
+        resource_path = path.resolve()
+        base = resource_path if resource_path.is_dir() else resource_path.parent
+
+        backlog_root: Optional[Path] = None
+        for candidate in [base, *base.parents]:
+            if candidate.name == "backlog" and candidate.parent.name == "_kano":
+                backlog_root = candidate
+                break
+        if backlog_root is None:
+            raise ConfigError(
+                "Could not infer legacy backlog root from --path. "
+                "Expected path under _kano/backlog/"
+            )
+
+        # Infer product.
+        resolved_product = (product or "").strip() or None
+        products_root = backlog_root / "products"
+        product_root: Optional[Path] = None
+
+        if resolved_product:
+            product_root = products_root / resolved_product
+        else:
+            # If --path points inside backlog_root/products/<product>/..., infer.
+            try:
+                rel = base.relative_to(products_root)
+                if rel.parts:
+                    resolved_product = rel.parts[0]
+                    product_root = products_root / resolved_product
+            except ValueError:
+                pass
+
+        if product_root is None:
+            if products_root.exists():
+                product_dirs = [p for p in products_root.iterdir() if p.is_dir()]
+                if len(product_dirs) == 1:
+                    product_root = product_dirs[0]
+                    resolved_product = product_root.name
+
+        if product_root is None or resolved_product is None:
+            raise ConfigError(
+                "Could not infer product from --path; pass --product explicitly."
+            )
+
+        sandbox_root = None
+        is_sandbox = False
+        if sandbox:
+            sandbox_root = backlog_root.parent / "backlog_sandbox" / sandbox
+            is_sandbox = True
+
+        project_root = backlog_root.parent.parent
+        return BacklogContext(
+            project_root=project_root,
+            backlog_root=backlog_root,
+            product_root=product_root,
+            sandbox_root=sandbox_root,
+            product_name=resolved_product,
+            is_sandbox=is_sandbox,
+        )
+
     try:
         ctx = ConfigLoader.from_path(
             path,
@@ -493,8 +559,11 @@ def config_migrate_json(
             topic=topic,
         )
     except ConfigError as e:
-        typer.echo(f"ConfigError: {e}")
-        raise typer.Exit(1)
+        try:
+            ctx = _legacy_ctx_from_path()
+        except ConfigError:
+            typer.echo(f"ConfigError: {e}")
+            raise typer.Exit(1)
 
     topic_name = (topic or "").strip() or (ConfigLoader.get_active_topic(ctx.backlog_root, agent or "") or "")
 

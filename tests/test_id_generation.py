@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 from pathlib import Path
 from kano_backlog_ops.item_utils import get_next_id_from_db
+from conftest import write_project_backlog_config
 
 def test_atomic_id_generation_concurrent(tmp_path: Path):
     """Test that concurrent ID generation produces unique, sequential IDs."""
@@ -65,6 +66,8 @@ def test_atomic_id_generation_concurrent(tmp_path: Path):
 
 def test_sync_sequences_dry_run(tmp_path: Path):
     """Test synchronization dry run."""
+    write_project_backlog_config(tmp_path)
+
     backlog_root = tmp_path / "_kano" / "backlog"
     product_root = backlog_root / "products" / "test-product"
     items_root = product_root / "items" / "task" / "0000"
@@ -75,10 +78,10 @@ def test_sync_sequences_dry_run(tmp_path: Path):
     (items_root / "TEST-TSK-0005_c.md").touch()
     
     from kano_backlog_ops.item_utils import sync_id_sequences
-    
-    cache_dir = product_root / ".cache"
-    cache_dir.mkdir(parents=True)
-    db_path = cache_dir / "chunks.sqlite3"
+
+    cache_dir = tmp_path / ".kano" / "cache" / "backlog"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    db_path = cache_dir / "backlog.test-product.chunks.v1.db"
     
     conn = sqlite3.connect(str(db_path))
     conn.execute("""
@@ -91,10 +94,6 @@ def test_sync_sequences_dry_run(tmp_path: Path):
     """)
     conn.commit()
     conn.close()
-    
-    config_dir = product_root / "_config"
-    config_dir.mkdir()
-    (config_dir / "config.toml").write_text('product.prefix = "TEST"', encoding="utf-8")
     
     result = sync_id_sequences(product="test-product", backlog_root=backlog_root, dry_run=True)
     

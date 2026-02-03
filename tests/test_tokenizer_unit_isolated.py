@@ -262,11 +262,12 @@ class TestHuggingFaceAdapterMocked:
     
     def test_initialization_without_transformers(self):
         """Test HuggingFaceAdapter initialization when transformers is not available."""
-        # Mock transformers import to fail
-        with patch.dict('sys.modules', {'transformers': None}):
+        # HuggingFaceAdapter checks the module-level `transformers` handle.
+        from kano_backlog_core import tokenizer as tok
+
+        with patch.object(tok, "transformers", None):
             with pytest.raises(ImportError, match="transformers package required"):
-                from kano_backlog_core.tokenizer import HuggingFaceAdapter
-                HuggingFaceAdapter("bert-base-uncased")
+                tok.HuggingFaceAdapter("bert-base-uncased")
     
     def test_model_name_validation(self):
         """Test model name validation."""

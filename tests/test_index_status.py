@@ -37,12 +37,13 @@ def test_index_status_existing_index(tmp_path):
     """Test status when index exists."""
     backlog_root = tmp_path / "_kano" / "backlog"
     product_root = backlog_root / "products" / "test-product"
-    cache_dir = product_root / ".cache"
-    cache_dir.mkdir(parents=True)
+    product_root.mkdir(parents=True)
     
     # Create a simple SQLite index
-    index_path = cache_dir / "index.sqlite3"
-    conn = sqlite3.connect(index_path)
+    index_path = tmp_path / ".kano" / "cache" / "backlog" / "index.backlog.test-product.v1.db"
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(str(index_path))
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE items (

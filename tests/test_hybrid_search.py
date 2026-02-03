@@ -2,48 +2,20 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from kano_backlog_ops.backlog_vector_index import build_vector_index
 from kano_backlog_ops.backlog_vector_query import search_hybrid
+from conftest import write_project_backlog_config
 
 
 def test_hybrid_search_end_to_end(tmp_path: Path) -> None:
+    write_project_backlog_config(tmp_path)
+
     backlog_root = tmp_path / "_kano" / "backlog"
     product_root = backlog_root / "products" / "test-product"
     items_root = product_root / "items" / "task" / "0000"
-    config_root = product_root / "_config"
     items_root.mkdir(parents=True)
-    config_root.mkdir(parents=True)
-
-    # Minimal pipeline config: sqlite vector backend + noop embedder.
-    config = {
-        "chunking": {
-            "target_tokens": 50,
-            "max_tokens": 100,
-            "overlap_tokens": 10,
-            "version": "chunk-v1",
-            "tokenizer_adapter": "heuristic",
-        },
-        "tokenizer": {
-            "adapter": "heuristic",
-            "model": "test-model",
-            "max_tokens": 200,
-        },
-        "embedding": {
-            "provider": "noop",
-            "model": "noop-embedding",
-            "dimension": 16,
-        },
-        "vector": {
-            "backend": "sqlite",
-            "path": ".cache/vector",
-            "collection": "test",
-            "metric": "cosine",
-        },
-    }
-    (config_root / "config.json").write_text(json.dumps(config), encoding="utf-8")
 
     item_path = items_root / "TEST-TSK-001_test-task.md"
     item_content = """---

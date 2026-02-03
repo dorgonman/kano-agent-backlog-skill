@@ -9,48 +9,18 @@ from kano_backlog_ops.backlog_index import build_index, get_index_status
 from kano_backlog_ops.backlog_vector_index import build_vector_index
 from kano_backlog_ops.backlog_vector_query import search_similar
 from kano_backlog_core.config import ConfigLoader
+from conftest import write_project_backlog_config
 
 
 def test_integrated_index_and_search_workflow(tmp_path):
     """Test the complete workflow: build SQLite index, build vector index, search."""
+    write_project_backlog_config(tmp_path)
+
     # Setup test backlog structure
     backlog_root = tmp_path / "_kano" / "backlog"
     product_root = backlog_root / "products" / "test-product"
     items_root = product_root / "items" / "task" / "0000"
-    config_root = product_root / "_config"
     items_root.mkdir(parents=True)
-    config_root.mkdir(parents=True)
-    
-    # Create config file with noop embedding settings
-    config_content = """
-[product]
-name = "test-product"
-prefix = "TEST"
-
-[embedding]
-provider = "noop"
-model = "noop-embedding"
-dimension = 1536
-
-[vector]
-backend = "sqlite"
-path = ".cache/vector"
-collection = "backlog"
-metric = "cosine"
-
-[tokenizer]
-adapter = "heuristic"
-model = "text-embedding-3-small"
-max_tokens = 8192
-
-[chunking]
-version = "chunk-v1"
-target_tokens = 512
-max_tokens = 1024
-overlap_tokens = 50
-"""
-    config_path = config_root / "config.toml"
-    config_path.write_text(config_content, encoding='utf-8')
     
     # Create test items with different content
     items = [

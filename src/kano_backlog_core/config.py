@@ -23,6 +23,7 @@ import logging
 import re
 import os
 import warnings
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -40,6 +41,11 @@ except ImportError:
         import tomli as tomllib  # type: ignore
     except ImportError:
         tomllib = None  # type: ignore
+
+try:
+    import tomli_w  # type: ignore
+except ImportError:
+    tomli_w = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +134,34 @@ class ConfigLoader:
         return ConfigLoader._read_json_optional(json_path)
 
     @staticmethod
+    def _resolve_optional_config_path(base_path: Path, filename_stem: str) -> Path:
+        toml_path = base_path / f"{filename_stem}.toml"
+        if toml_path.exists():
+            return toml_path
+        json_path = base_path / f"{filename_stem}.json"
+        if json_path.exists():
+            return json_path
+        return toml_path
+
+    @staticmethod
+    def _stringify_paths(value: Any) -> Any:
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, dict):
+            return {k: ConfigLoader._stringify_paths(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [ConfigLoader._stringify_paths(v) for v in value]
+        return value
+
+    @staticmethod
+    def _strip_nulls(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: ConfigLoader._strip_nulls(v) for k, v in value.items() if v is not None}
+        if isinstance(value, list):
+            return [ConfigLoader._strip_nulls(v) for v in value if v is not None]
+        return value
+
+    @staticmethod
     def _normalize_product_name(product: str) -> str:
         return product.strip()
 
@@ -151,72 +185,6 @@ class ConfigLoader:
         """
 
         return project_root / ".kano" / "backlog_config"
-
-    @staticmethod
-    def get_skill_profiles_root() -> Path:
-        """Return the skill-shipped profiles root.
-
-        Profiles shipped with the skill provide official defaults that work out of the box.
-        Project profiles under .kano/backlog_config always take precedence.
-        """
-
-        # <skill_root>/src/kano_backlog_core/config.py -> <skill_root>
-        return Path(__file__).resolve().parents[2] / "profiles"
-
-
-    @staticmethod
-    def _try_existing_profile_path(project_root: Path, profile: str) -> Optional[Path]:
-        """Return a resolved path if the profile argument matches an existing file.
-
-        Path-first semantics:
-        - Always try absolute path and repo-root relative path candidates.
-        - If a file exists there, use it.
-        - Otherwise, caller can fall back to shorthand resolution.
-        """
-
-        raw = profile.strip()
-        if not raw:
-            return None
-
-        p = Path(raw)
-        candidates: list[Path] = []
-        if p.is_absolute():
-            candidates.append(p)
-            if p.suffix == "":
-                candidates.append(p.with_suffix(".toml"))
-        else:
-            # Avoid traversal attempts when interpreting as repo-relative.
-            if ".." in p.parts:
-                raise ConfigError(f"invalid profile path: {profile!r}")
-            base = project_root / p
-            candidates.append(base)
-            if base.suffix == "":
-                candidates.append(base.with_suffix(".toml"))
-
-        for c in candidates:
-            # Only enforce repo-root containment for repo-relative inputs.
-            if not c.is_absolute() or not p.is_absolute():
-                resolved = c.resolve()
-                try:
-                    resolved.relative_to(project_root.resolve())
-                except Exception:
-                    raise ConfigError(
-                        f"profile path escapes project root: {profile!r} ({resolved})"
-                    )
-            else:
-                resolved = c.resolve()
-
-            if not resolved.exists():
-                continue
-            if resolved.is_dir():
-                raise ConfigError(f"profile path is a directory: {profile!r} ({resolved})")
-            if resolved.suffix.lower() != ".toml":
-                raise ConfigError(
-                    f"profile path must point to a .toml file: {profile!r} ({resolved})"
-                )
-            return resolved
-
-        return None
 
     @staticmethod
     def _validate_profile_ref(profile: str) -> str:
@@ -248,80 +216,15 @@ class ConfigLoader:
         return normalized
 
     @staticmethod
-    def load_profile_overrides(project_root: Path, *, profile: Optional[str] = None) -> dict[str, Any]:
-        if not profile:
-            return {}
-
-        config_path: Path
-        existing_path = ConfigLoader._try_existing_profile_path(project_root, profile)
-        if existing_path is not None:
-            config_path = existing_path
-        else:
-            name = ConfigLoader._validate_profile_ref(profile)
-            rel_parts = name.split("/")
-
-            project_profiles_root = ConfigLoader.get_profiles_root(project_root)
-            skill_profiles_root = ConfigLoader.get_skill_profiles_root()
-
-            candidates = [
-                project_profiles_root.joinpath(*rel_parts).with_suffix(".toml"),
-                skill_profiles_root.joinpath(*rel_parts).with_suffix(".toml"),
-            ]
-
-            config_path = next((p for p in candidates if p.exists()), candidates[0])
-            if not config_path.exists():
-                available: list[str] = []
-                for root in (project_profiles_root, skill_profiles_root):
-                    if not root.exists():
-                        continue
-                    for p in sorted(root.rglob("*.toml")):
-                        if not p.is_file():
-                            continue
-                        rel = p.relative_to(root).with_suffix("")
-                        available.append(str(rel).replace("\\\\", "/"))
-                seen = set()
-                available = [a for a in available if not (a in seen or seen.add(a))]
-                joined = ", ".join(available)
-                hint = f" Available: {joined}" if available else " No profiles found."
-                raise ConfigError(f"Profile not found: {name!r} ({config_path}).{hint}")
-
-        data = ConfigLoader._read_toml_optional(config_path)
-        if not isinstance(data, dict):
-            raise ConfigError(f"Profile config must be a TOML table: {config_path}")
-
-        flat_map: dict[str, tuple[str, ...]] = {
-            "vector_enabled": ("vector", "enabled"),
-            "vector_backend": ("vector", "backend"),
-            "vector_metric": ("vector", "metric"),
-            "analysis_llm_enabled": ("analysis", "llm", "enabled"),
-            "cache_root": ("cache", "root"),
-            "log_debug": ("log", "debug"),
-            "log_verbosity": ("log", "verbosity"),
-            "embedding_provider": ("embedding", "provider"),
-            "embedding_model": ("embedding", "model"),
-            "embedding_dimension": ("embedding", "dimension"),
-            "chunking_target_tokens": ("chunking", "target_tokens"),
-            "chunking_max_tokens": ("chunking", "max_tokens"),
-            "tokenizer_adapter": ("tokenizer", "adapter"),
-            "tokenizer_model": ("tokenizer", "model"),
-        }
-
-        overlay: dict[str, Any] = {}
-        for k, path in flat_map.items():
-            if k not in data:
-                continue
-            value = data[k]
-            current: dict[str, Any] = overlay
-            for part in path[:-1]:
-                next_val = current.get(part)
-                if not isinstance(next_val, dict):
-                    next_val = {}
-                    current[part] = next_val
-                current = next_val
-            current[path[-1]] = value
-
-        cleaned = {k: v for k, v in data.items() if k not in flat_map}
-        return ConfigLoader._deep_merge(cleaned, overlay)
+    def _set_nested(target: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
+        current: dict[str, Any] = target
+        for part in path[:-1]:
+            next_val = current.get(part)
+            if not isinstance(next_val, dict):
+                next_val = {}
+                current[part] = next_val
+            current = next_val
+        current[path[-1]] = value
 
     @staticmethod
     def get_chunks_cache_root(
@@ -337,15 +240,17 @@ class ConfigLoader:
         This allows cache to be stored in a shared location (e.g., NAS)
         independent of where the backlog data is stored.
         """
+        repo_root = backlog_root.parent.parent
+
         if effective_config:
             cache_config = effective_config.get("cache", {})
             if isinstance(cache_config, dict):
                 cache_root = cache_config.get("root")
-                if cache_root:
-                    return Path(cache_root)
-        
-        repo_root = backlog_root.parent.parent
-        return repo_root / ".kano" / "cache" / "backlog"
+                if isinstance(cache_root, str) and cache_root.strip():
+                    candidate = Path(cache_root.strip())
+                    return (candidate if candidate.is_absolute() else (repo_root / candidate)).resolve()
+
+        return (repo_root / ".kano" / "cache" / "backlog").resolve()
 
     @staticmethod
     def get_topics_root(backlog_root: Path) -> Path:
@@ -376,13 +281,17 @@ class ConfigLoader:
         return topic or None
 
     @staticmethod
+    def _resolve_topic_name(backlog_root: Path, topic: Optional[str], agent: Optional[str]) -> Optional[str]:
+        return (topic or "").strip() or (ConfigLoader.get_active_topic(backlog_root, agent or "") or "") or None
+
+    @staticmethod
     def load_topic_overrides(
         backlog_root: Path,
         *,
         topic: Optional[str] = None,
         agent: Optional[str] = None,
     ) -> dict[str, Any]:
-        topic_name = (topic or "").strip() or (ConfigLoader.get_active_topic(backlog_root, agent or "") or "")
+        topic_name = ConfigLoader._resolve_topic_name(backlog_root, topic, agent)
         if not topic_name:
             return {}
         return ConfigLoader._read_config_optional(ConfigLoader.get_topic_path(backlog_root, topic_name), "config")
@@ -392,6 +301,171 @@ class ConfigLoader:
         if not item_id:
             return {}
         return ConfigLoader._read_config_optional(ConfigLoader.get_workset_path(backlog_root, item_id), "config")
+
+    @staticmethod
+    def _get_project_cache_root(project_root: Path) -> Path:
+        return project_root / ".kano" / "cache"
+
+    @staticmethod
+    def _get_stable_cache_path(project_root: Path) -> Path:
+        return ConfigLoader._get_project_cache_root(project_root) / "effective_backlog_config.toml"
+
+    @staticmethod
+    def _get_runtime_cache_path(project_root: Path) -> Path:
+        return (
+            ConfigLoader._get_project_cache_root(project_root)
+            / "effective_runtime_backlog_config.toml"
+        )
+
+    @staticmethod
+    def _get_mtime(path: Optional[Path]) -> Optional[float]:
+        if not path:
+            return None
+        try:
+            if path.exists():
+                return path.stat().st_mtime
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _collect_sources(
+        *,
+        ctx: BacklogContext,
+        project_config_path: Path,
+        profile_path: Optional[Path],
+        topic_name: Optional[str],
+        workset_item_id: Optional[str],
+    ) -> list[dict[str, Any]]:
+        sources: list[dict[str, Any]] = []
+
+        sources.append({
+            "kind": "system_defaults",
+            "path": "",
+            "exists": False,
+            "mtime": None,
+        })
+
+        defaults_path = ConfigLoader._resolve_optional_config_path(
+            ctx.backlog_root / "_shared", "defaults"
+        )
+        sources.append({
+            "kind": "defaults",
+            "path": str(defaults_path),
+            "exists": defaults_path.exists(),
+            "mtime": ConfigLoader._get_mtime(defaults_path),
+        })
+
+        sources.append({
+            "kind": "project_config",
+            "path": str(project_config_path),
+            "exists": project_config_path.exists(),
+            "mtime": ConfigLoader._get_mtime(project_config_path),
+        })
+
+        if profile_path:
+            sources.append({
+                "kind": "profile",
+                "path": str(profile_path),
+                "exists": profile_path.exists(),
+                "mtime": ConfigLoader._get_mtime(profile_path),
+            })
+
+        if topic_name:
+            topic_path = ConfigLoader.get_topic_path(ctx.backlog_root, topic_name)
+            topic_cfg_path = ConfigLoader._resolve_optional_config_path(topic_path, "config")
+            sources.append({
+                "kind": "topic",
+                "path": str(topic_cfg_path),
+                "exists": topic_cfg_path.exists(),
+                "mtime": ConfigLoader._get_mtime(topic_cfg_path),
+            })
+
+        if workset_item_id:
+            workset_path = ConfigLoader.get_workset_path(ctx.backlog_root, workset_item_id)
+            workset_cfg_path = ConfigLoader._resolve_optional_config_path(workset_path, "config")
+            sources.append({
+                "kind": "workset",
+                "path": str(workset_cfg_path),
+                "exists": workset_cfg_path.exists(),
+                "mtime": ConfigLoader._get_mtime(workset_cfg_path),
+            })
+
+        return ConfigLoader._strip_nulls(sources)
+
+    @staticmethod
+    def _build_cache_inputs(
+        *,
+        ctx: BacklogContext,
+        profile: Optional[str],
+        topic_name: Optional[str],
+        workset_item_id: Optional[str],
+        agent: Optional[str],
+        custom_config_file: Optional[Path],
+    ) -> dict[str, Any]:
+        inputs = {
+            "product": ctx.product_name,
+            "profile": profile,
+            "topic": topic_name,
+            "workset": workset_item_id,
+            "agent": agent,
+            "custom_config_file": str(custom_config_file) if custom_config_file else None,
+        }
+        return ConfigLoader._strip_nulls(inputs)
+
+    @staticmethod
+    def _load_cached_effective_config(
+        cache_path: Path,
+        *,
+        sources: list[dict[str, Any]],
+        inputs: dict[str, Any],
+    ) -> Optional[dict[str, Any]]:
+        if not cache_path.exists():
+            return None
+        data = ConfigLoader._read_toml_optional(cache_path)
+        if not isinstance(data, dict):
+            return None
+        meta = data.get("meta")
+        if not isinstance(meta, dict):
+            return None
+        if meta.get("version") != 1:
+            return None
+        if meta.get("sources") != sources:
+            return None
+        if meta.get("inputs") != inputs:
+            return None
+        config = data.get("config")
+        if not isinstance(config, dict):
+            return None
+        return config
+
+    @staticmethod
+    def _write_effective_cache(
+        *,
+        cache_path: Path,
+        ctx: BacklogContext,
+        effective: dict[str, Any],
+        sources: list[dict[str, Any]],
+        inputs: dict[str, Any],
+    ) -> None:
+        if tomli_w is None:
+            raise ConfigError("tomli-w is required to write effective config cache")
+
+        payload = {
+            "meta": {
+                "version": 1,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "sources": sources,
+                "inputs": inputs,
+            },
+            "context": ConfigLoader._stringify_paths(ctx.model_dump()),
+            "config": effective,
+        }
+
+        cleaned = ConfigLoader._strip_nulls(ConfigLoader._stringify_paths(payload))
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        text = tomli_w.dumps(cleaned)
+        cache_path.write_text(text, encoding="utf-8")
 
     @staticmethod
     def from_path(
@@ -451,7 +525,7 @@ class ConfigLoader:
         config_path = ProjectConfigLoader.find_project_config(resource_path, custom_config_file)
         if not config_path:
             raise ConfigError("Project config file not found")
-            
+
         if config_path.parent.name == ".kano":
             # Standard location: .kano/backlog_config.toml
             project_root = config_path.parent.parent
@@ -615,6 +689,49 @@ class ConfigLoader:
         return config_path.parent
 
     @staticmethod
+    def _resolve_profile_path(project_root: Path, profile_name: str) -> Path:
+        profiles_root = (project_root / ".kano" / "backlog_config").resolve()
+
+        raw = profile_name.strip()
+        norm = raw.replace("\\", "/")
+        explicit_path = Path(raw).is_absolute() or norm.startswith(".") or norm.endswith(".toml")
+
+        if explicit_path:
+            candidate = Path(raw)
+            if not candidate.is_absolute():
+                candidate = (project_root / candidate).resolve()
+                if project_root.resolve() not in candidate.parents and candidate != project_root.resolve():
+                    raise ConfigError(f"Invalid profile path traversal: {profile_name}")
+            else:
+                candidate = candidate.resolve()
+            if candidate.suffix == "":
+                candidate = candidate.with_suffix(".toml")
+            if not candidate.exists():
+                raise ConfigError(f"Profile config not found: {candidate}")
+        else:
+            name = ConfigLoader._validate_profile_ref(raw)
+            rel = Path(name)
+            if not rel.suffix:
+                rel = rel.with_suffix(".toml")
+            candidate = (profiles_root / rel).resolve()
+            if profiles_root not in candidate.parents and candidate != profiles_root:
+                raise ConfigError(f"Invalid profile path traversal: {profile_name}")
+
+            if not candidate.exists():
+                fallback = (project_root / rel).resolve()
+                if project_root.resolve() not in fallback.parents and fallback != project_root.resolve():
+                    raise ConfigError(f"Invalid profile path traversal: {profile_name}")
+                if fallback.exists():
+                    candidate = fallback
+                else:
+                    raise ConfigError(f"Profile config not found: {candidate}")
+
+        if not candidate.is_file():
+            raise ConfigError(f"Profile config is not a file: {candidate}")
+
+        return candidate
+
+    @staticmethod
     def load_profile_overrides(
         start_path: Path,
         *,
@@ -625,8 +742,9 @@ class ConfigLoader:
 
         Profile resolution:
         - CLI/env provides `profile` (or env KANO_BACKLOG_PROFILE).
-        - If set, load: <project_root>/.kano/backlog_config/<profile>.toml
-          where <profile> can include subfolders (e.g., "embedding/local-noop").
+        - Explicit paths (absolute, or starting with '.', or ending in .toml) are honored.
+        - Shorthand resolves under <project_root>/.kano/backlog_config/<profile>.toml.
+          If not found, fallback checks <project_root>/<profile>.toml.
 
         The profile file is treated as a config overlay (higher priority than
         topic/workset in this implementation, but lower than explicit CLI flags).
@@ -636,26 +754,37 @@ class ConfigLoader:
             return {}
 
         project_root = ConfigLoader._resolve_project_root_for_profiles(start_path, custom_config_file)
-        profiles_root = (project_root / ".kano" / "backlog_config").resolve()
+        candidate = ConfigLoader._resolve_profile_path(project_root, profile_name)
 
-        # Allow an explicit absolute path (advanced usage); otherwise resolve within profiles_root.
-        raw_path = Path(profile_name)
-        if raw_path.is_absolute():
-            candidate = raw_path
-        else:
-            rel = raw_path
-            if not rel.suffix:
-                rel = rel.with_suffix(".toml")
-            candidate = (profiles_root / rel).resolve()
-            if profiles_root not in candidate.parents and candidate != profiles_root:
-                raise ConfigError(f"Invalid profile path traversal: {profile_name}")
+        data = ConfigLoader._read_toml_optional(candidate)
+        if not isinstance(data, dict):
+            raise ConfigError(f"Profile config must be a TOML table: {candidate}")
 
-        if not candidate.exists():
-            raise ConfigError(f"Profile config not found: {candidate}")
-        if not candidate.is_file():
-            raise ConfigError(f"Profile config is not a file: {candidate}")
+        flat_map: dict[str, tuple[str, ...]] = {
+            "vector_enabled": ("vector", "enabled"),
+            "vector_backend": ("vector", "backend"),
+            "vector_metric": ("vector", "metric"),
+            "analysis_llm_enabled": ("analysis", "llm", "enabled"),
+            "cache_root": ("cache", "root"),
+            "log_debug": ("log", "debug"),
+            "log_verbosity": ("log", "verbosity"),
+            "embedding_provider": ("embedding", "provider"),
+            "embedding_model": ("embedding", "model"),
+            "embedding_dimension": ("embedding", "dimension"),
+            "chunking_target_tokens": ("chunking", "target_tokens"),
+            "chunking_max_tokens": ("chunking", "max_tokens"),
+            "tokenizer_adapter": ("tokenizer", "adapter"),
+            "tokenizer_model": ("tokenizer", "model"),
+        }
 
-        return ConfigLoader._read_toml_optional(candidate)
+        overlay: dict[str, Any] = {}
+        for key, path in flat_map.items():
+            if key not in data:
+                continue
+            ConfigLoader._set_nested(overlay, path, data[key])
+
+        cleaned = {k: v for k, v in data.items() if k not in flat_map}
+        return ConfigLoader._deep_merge(cleaned, overlay)
 
     @staticmethod
     def load_effective_config(
@@ -698,42 +827,159 @@ class ConfigLoader:
             resource_path, ctx.product_name, custom_config_file
         )
 
-        # Resolve profile selection (CLI arg -> env var -> repo defaults)
-        resolved_profile = (profile or os.environ.get("KANO_BACKLOG_PROFILE") or "").strip() or None
-        if not resolved_profile:
-            candidate = project_cfg.get("profile")
-            if isinstance(candidate, str) and candidate.strip():
-                resolved_profile = candidate.strip()
-            else:
-                profiles_block = project_cfg.get("profiles")
-                if isinstance(profiles_block, dict):
-                    active = profiles_block.get("active")
-                    if isinstance(active, str) and active.strip():
-                        resolved_profile = active.strip()
+        project_default_profile = None
+        candidate = project_cfg.get("profile")
+        if isinstance(candidate, str) and candidate.strip():
+            project_default_profile = candidate.strip()
+        else:
+            profiles_block = project_cfg.get("profiles")
+            if isinstance(profiles_block, dict):
+                active = profiles_block.get("active")
+                if isinstance(active, str) and active.strip():
+                    project_default_profile = active.strip()
 
-        profile_cfg = ConfigLoader.load_profile_overrides(ctx.project_root, profile=resolved_profile)
-        topic_cfg = ConfigLoader.load_topic_overrides(ctx.backlog_root, topic=topic, agent=agent)
+        env_profile = os.environ.get("KANO_BACKLOG_PROFILE") or ""
+        explicit_profile = (profile or env_profile).strip() or None
+        resolved_profile = explicit_profile or project_default_profile
+
+        stable_profile = project_default_profile
+        stable_profile_cfg = (
+            ConfigLoader.load_profile_overrides(ctx.project_root, profile=stable_profile)
+            if stable_profile
+            else {}
+        )
+        profile_cfg = (
+            ConfigLoader.load_profile_overrides(ctx.project_root, profile=resolved_profile)
+            if resolved_profile
+            else {}
+        )
+
+        topic_name = ConfigLoader._resolve_topic_name(ctx.backlog_root, topic, agent)
+        topic_cfg = ConfigLoader.load_topic_overrides(ctx.backlog_root, topic=topic_name, agent=agent)
         workset_cfg = ConfigLoader.load_workset_overrides(ctx.backlog_root, item_id=workset_item_id)
 
+        config_path = ProjectConfigLoader.find_project_config(resource_path, custom_config_file)
+        if not config_path:
+            raise ConfigError("Project config file not found")
 
+        project_config_obj = ProjectConfigLoader.load_project_config(config_path)
+        product_def = project_config_obj.get_product(ctx.product_name)
+        if not product_def:
+            raise ConfigError(f"Product '{ctx.product_name}' not found in project config")
+        product_block: dict[str, Any] = {
+            "name": product_def.name,
+            "prefix": product_def.prefix,
+        }
 
-        # Merge layers in precedence order (system defaults first, then user configs)
-        effective: dict[str, Any] = {}
-        for layer in (
-            system_defaults,
-            defaults,
-            project_cfg,
-            project_product_overrides,
-            profile_cfg,
-            topic_cfg,
-            workset_cfg,
-        ):
-            if isinstance(layer, dict):
-                effective = ConfigLoader._deep_merge(effective, layer)
+        stable_profile_path = (
+            ConfigLoader._resolve_profile_path(ctx.project_root, stable_profile)
+            if stable_profile
+            else None
+        )
+        runtime_profile_path = (
+            ConfigLoader._resolve_profile_path(ctx.project_root, resolved_profile)
+            if resolved_profile
+            else None
+        )
 
-        # Compile human-friendly backend blocks into canonical URIs (local-first; no network calls)
-        effective = compile_effective_config(effective, default_filesystem_root=ctx.project_root)
-        return ctx, effective
+        stable_sources = ConfigLoader._collect_sources(
+            ctx=ctx,
+            project_config_path=config_path,
+            profile_path=stable_profile_path,
+            topic_name=None,
+            workset_item_id=None,
+        )
+        runtime_sources = ConfigLoader._collect_sources(
+            ctx=ctx,
+            project_config_path=config_path,
+            profile_path=runtime_profile_path,
+            topic_name=topic_name,
+            workset_item_id=workset_item_id,
+        )
+
+        stable_inputs = ConfigLoader._build_cache_inputs(
+            ctx=ctx,
+            profile=stable_profile,
+            topic_name=None,
+            workset_item_id=None,
+            agent=agent,
+            custom_config_file=custom_config_file,
+        )
+        runtime_inputs = ConfigLoader._build_cache_inputs(
+            ctx=ctx,
+            profile=resolved_profile,
+            topic_name=topic_name,
+            workset_item_id=workset_item_id,
+            agent=agent,
+            custom_config_file=custom_config_file,
+        )
+
+        stable_cache_path = ConfigLoader._get_stable_cache_path(ctx.project_root)
+        runtime_cache_path = ConfigLoader._get_runtime_cache_path(ctx.project_root)
+
+        stable_effective = ConfigLoader._load_cached_effective_config(
+            stable_cache_path, sources=stable_sources, inputs=stable_inputs
+        )
+
+        runtime_effective = ConfigLoader._load_cached_effective_config(
+            runtime_cache_path, sources=runtime_sources, inputs=runtime_inputs
+        )
+
+        if stable_effective is None:
+            stable_effective = {}
+            for layer in (
+                system_defaults,
+                defaults,
+                project_cfg,
+                project_product_overrides,
+                stable_profile_cfg,
+            ):
+                if isinstance(layer, dict):
+                    stable_effective = ConfigLoader._deep_merge(stable_effective, layer)
+
+            stable_effective["product"] = dict(product_block)
+            stable_effective = compile_effective_config(
+                stable_effective, default_filesystem_root=ctx.project_root
+            )
+            ConfigLoader._write_effective_cache(
+                cache_path=stable_cache_path,
+                ctx=ctx,
+                effective=stable_effective,
+                sources=stable_sources,
+                inputs=stable_inputs,
+            )
+
+        runtime_overrides = bool(explicit_profile or topic_name or workset_item_id)
+        if runtime_overrides:
+            if runtime_effective is None:
+                runtime_effective = {}
+                for layer in (
+                    system_defaults,
+                    defaults,
+                    project_cfg,
+                    project_product_overrides,
+                    profile_cfg,
+                    topic_cfg,
+                    workset_cfg,
+                ):
+                    if isinstance(layer, dict):
+                        runtime_effective = ConfigLoader._deep_merge(runtime_effective, layer)
+
+                runtime_effective["product"] = dict(product_block)
+                runtime_effective = compile_effective_config(
+                    runtime_effective, default_filesystem_root=ctx.project_root
+                )
+                ConfigLoader._write_effective_cache(
+                    cache_path=runtime_cache_path,
+                    ctx=ctx,
+                    effective=runtime_effective,
+                    sources=runtime_sources,
+                    inputs=runtime_inputs,
+                )
+        else:
+            runtime_effective = stable_effective
+
+        return ctx, runtime_effective
 
     @staticmethod
     def validate_pipeline_config(config: dict[str, Any]) -> Any:

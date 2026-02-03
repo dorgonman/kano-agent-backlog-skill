@@ -209,8 +209,10 @@ def build_repo_chunks_db(
     t0 = time.perf_counter()
     
     if project_root is None:
-        backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
-        project_root = backlog_root_path.parent.parent
+        if backlog_root is not None:
+            project_root = backlog_root.resolve().parent.parent
+        else:
+            project_root = Path.cwd().resolve()
     else:
         project_root = project_root.resolve()
     
@@ -225,9 +227,32 @@ def build_repo_chunks_db(
     # Get project name from project root directory
     project_name = project_root.name
     
-    backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
-    _, effective = ConfigLoader.load_effective_config(backlog_root_path, product=None)
-    cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
+    def _resolve_repo_cache_dir() -> Path:
+        """Resolve repo corpus cache directory.
+
+        Repo corpus indexing should work even when the backlog is not initialized
+        yet (or when no project config exists). We prefer project config
+        `[shared.cache].root` when available, otherwise default to
+        `<project_root>/.kano/cache/backlog`.
+        """
+        default_dir = project_root / ".kano" / "cache" / "backlog"
+        try:
+            from kano_backlog_core.project_config import ProjectConfigLoader
+
+            project_cfg = ProjectConfigLoader.load_project_config_optional(project_root)
+            shared = project_cfg.shared if project_cfg else None
+            if isinstance(shared, dict):
+                cache = shared.get("cache")
+                if isinstance(cache, dict):
+                    root = cache.get("root")
+                    if isinstance(root, str) and root.strip():
+                        candidate = Path(root.strip())
+                        return (candidate if candidate.is_absolute() else (project_root / candidate)).resolve()
+        except Exception:
+            pass
+        return default_dir
+
+    cache_dir = _resolve_repo_cache_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
     db_path = cache_dir / f"repo.{project_name}.chunks.v1.db"
     
@@ -238,13 +263,16 @@ def build_repo_chunks_db(
         db_path.unlink()
     
     try:
-        if backlog_root is None:
-            backlog_root_path, _ = _resolve_backlog_root(None, create_if_missing=False)
+        backlog_root_path: Optional[Path] = None
+        if backlog_root is not None:
+            backlog_root_path = backlog_root.resolve()
         else:
-            backlog_root_path = backlog_root
-        
-        products_dir = backlog_root_path / "products"
-        product_dirs = [p for p in products_dir.iterdir() if p.is_dir()] if products_dir.exists() else []
+            candidate = project_root / "_kano" / "backlog"
+            if candidate.exists():
+                backlog_root_path = candidate
+
+        products_dir = (backlog_root_path / "products") if backlog_root_path else None
+        product_dirs = [p for p in products_dir.iterdir() if p.is_dir()] if (products_dir and products_dir.exists()) else []
         
         if product_dirs:
             _, effective = ConfigLoader.load_effective_config(
@@ -436,17 +464,35 @@ def query_repo_chunks_fts(
     """Keyword search over repo corpus chunks_fts."""
     
     if project_root is None:
-        backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
-        project_root = backlog_root_path.parent.parent
+        if backlog_root is not None:
+            project_root = backlog_root.resolve().parent.parent
+        else:
+            project_root = Path.cwd().resolve()
     else:
         project_root = project_root.resolve()
     
     # Get project name from project root directory
     project_name = project_root.name
     
-    backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
-    _, effective = ConfigLoader.load_effective_config(backlog_root_path, product=None)
-    cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
+    def _resolve_repo_cache_dir() -> Path:
+        default_dir = project_root / ".kano" / "cache" / "backlog"
+        try:
+            from kano_backlog_core.project_config import ProjectConfigLoader
+
+            project_cfg = ProjectConfigLoader.load_project_config_optional(project_root)
+            shared = project_cfg.shared if project_cfg else None
+            if isinstance(shared, dict):
+                cache = shared.get("cache")
+                if isinstance(cache, dict):
+                    root = cache.get("root")
+                    if isinstance(root, str) and root.strip():
+                        candidate = Path(root.strip())
+                        return (candidate if candidate.is_absolute() else (project_root / candidate)).resolve()
+        except Exception:
+            pass
+        return default_dir
+
+    cache_dir = _resolve_repo_cache_dir()
     
     db_path = cache_dir / f"repo.{project_name}.chunks.v1.db"
     if not db_path.exists():

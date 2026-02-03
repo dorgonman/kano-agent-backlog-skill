@@ -101,24 +101,6 @@ def test_empty_when_neither_exists(tmp_path: Path):
     assert config == {}
 
 
-def test_product_config_toml_precedence(tmp_path: Path):
-    """Product config.toml takes precedence over config.json."""
-    backlog_root = tmp_path / "_kano" / "backlog"
-    product_root = backlog_root / "products" / "test-product"
-    config_dir = product_root / "_config"
-    config_dir.mkdir(parents=True)
-    
-    # Create both
-    json_path = config_dir / "config.json"
-    json_path.write_text(json.dumps({"env": "dev"}), encoding="utf-8")
-    
-    toml_path = config_dir / "config.toml"
-    toml_path.write_text('env = "prod"', encoding="utf-8")
-    
-    config = ConfigLoader.load_product_config(product_root)
-    assert config["env"] == "prod"
-
-
 def test_topic_config_toml_precedence(tmp_path: Path):
     """Topic config.toml takes precedence over config.json."""
     backlog_root = tmp_path / "_kano" / "backlog"
@@ -154,7 +136,7 @@ def test_workset_config_toml_precedence(tmp_path: Path):
 
 
 def test_deep_merge_toml_and_json(tmp_path: Path):
-    """Verify deep merge works identically for TOML as for JSON."""
+    """Verify deep merge works across TOML defaults + JSON overrides."""
     backlog_root = tmp_path / "_kano" / "backlog"
     backlog_root.mkdir(parents=True)
     
@@ -171,21 +153,23 @@ markdown_engine = "dataview"
 default_type = "Task"
 """, encoding="utf-8")
     
-    # Product (JSON for variety)
-    product_root = backlog_root / "products" / "prod"
-    product_root.mkdir(parents=True)
-    config_dir = product_root / "_config"
-    config_dir.mkdir(parents=True)
-    config_json = config_dir / "config.json"
-    config_json.write_text(json.dumps({
-        "views": {"auto_refresh": False},
-        "items": {"default_priority": "Medium"}
-    }), encoding="utf-8")
+    # Topic overrides (JSON for variety)
+    topic_path = ConfigLoader.get_topic_path(backlog_root, "test-topic")
+    topic_path.mkdir(parents=True)
+    (topic_path / "config.json").write_text(
+        json.dumps(
+            {
+                "views": {"auto_refresh": False},
+                "items": {"default_priority": "Medium"},
+            }
+        ),
+        encoding="utf-8",
+    )
     
     # Load and merge
     defaults = ConfigLoader.load_defaults(backlog_root)
-    product_cfg = ConfigLoader.load_product_config(product_root)
-    merged = ConfigLoader._deep_merge(defaults, product_cfg)
+    topic_cfg = ConfigLoader.load_topic_overrides(backlog_root, topic="test-topic")
+    merged = ConfigLoader._deep_merge(defaults, topic_cfg)
     
     # Verify nested merge
     assert merged["views"]["auto_refresh"] is False  # product override

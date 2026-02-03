@@ -10,6 +10,7 @@ sys.path.insert(0, str(src_dir))
 
 from kano_backlog_core.models import ItemState, ItemType
 from kano_backlog_ops.workitem import create_item, get_item, list_items, update_state
+from conftest import write_project_backlog_config
 
 
 def _scaffold_product(tmp_path: Path, *, name: str = "demo-product", prefix: str = "DE") -> Path:
@@ -23,21 +24,7 @@ def _scaffold_product(tmp_path: Path, *, name: str = "demo-product", prefix: str
     for required_dir in ["decisions", "views", "_meta"]:
         (product_root / required_dir).mkdir(parents=True, exist_ok=True)
 
-    cfg_dir = product_root / "_config"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    cfg_text = f"""
-[product]
-name = "{name}"
-prefix = "{prefix}"
-
-[views]
-auto_refresh = false
-"""
-    (cfg_dir / "config.toml").write_text(cfg_text.strip() + "\n", encoding="utf-8")
-
-    shared = backlog_root / "_shared"
-    shared.mkdir(parents=True, exist_ok=True)
-    (shared / "defaults.toml").write_text(f"default_product = \"{name}\"\n", encoding="utf-8")
+    write_project_backlog_config(tmp_path, products={name: (name, prefix)})
 
     return product_root
 
@@ -132,6 +119,7 @@ def test_update_state_syncs_parent_and_refreshes_dashboards(tmp_path: Path):
             product=product_name,
             agent="tester",
             parent=parent.id,
+            force=True,
         )
         c2 = create_item(
             item_type=ItemType.TASK,
@@ -139,6 +127,7 @@ def test_update_state_syncs_parent_and_refreshes_dashboards(tmp_path: Path):
             product=product_name,
             agent="tester",
             parent=parent.id,
+            force=True,
         )
 
         started = update_state(
@@ -149,6 +138,7 @@ def test_update_state_syncs_parent_and_refreshes_dashboards(tmp_path: Path):
             product=product_name,
             sync_parent=True,
             refresh_dashboards=False,
+            force=True,
         )
         assert started.parent_synced is True
         parent_after_start = get_item(parent.id, product=product_name)
@@ -189,4 +179,3 @@ def test_update_state_syncs_parent_and_refreshes_dashboards(tmp_path: Path):
         assert (views_root / "Dashboard_PlainMarkdown_Done.md").exists()
     finally:
         os.chdir(cwd_before)
-

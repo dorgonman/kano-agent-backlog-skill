@@ -15,6 +15,8 @@ from kano_backlog_core.embedding import resolve_embedder
 from kano_backlog_core.tokenizer import resolve_model_max_tokens
 from kano_backlog_core.vector import VectorQueryResult, get_backend
 
+from .backlog_vector_index import _resolve_sqlite_vector_db_path
+
 from .backlog_chunks_db import ChunkFtsCandidate, query_chunks_fts_candidates
 
 @dataclass
@@ -83,21 +85,32 @@ def search_similar(
     query_embeddings = embedder.embed_batch([query_text])
     query_vector = query_embeddings[0].vector
     
-    # Resolve vector backend
-    vec_path = Path(pc.vector.path)
-    if not vec_path.is_absolute():
-        vec_path = ctx.product_root / vec_path
-        
+    # Resolve vector backend. Must match build_vector_index() storage naming.
+    if cache_root:
+        vec_path = Path(cache_root)
+    else:
+        vec_path = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
+
     embedding_space_id = (
-        f"emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
+        f"corpus:backlog"
+        f"|emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
         f"|tok:{pc.tokenizer.adapter}:{pc.tokenizer.model}:max{pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)}"
         f"|chunk:{pc.chunking.version}"
         f"|metric:{pc.vector.metric}"
     )
 
+    sqlite_vec_db_path: Optional[Path] = None
+    if pc.vector.backend == "sqlite":
+        sqlite_vec_db_path = _resolve_sqlite_vector_db_path(
+            vec_path=vec_path,
+            collection=pc.vector.collection,
+            embedding_space_id=embedding_space_id,
+            product=product,
+        )
+
     vec_cfg = {
         "backend": pc.vector.backend,
-        "path": str(vec_path),
+        "path": str(sqlite_vec_db_path) if sqlite_vec_db_path else str(vec_path),
         "collection": pc.vector.collection,
         "embedding_space_id": embedding_space_id,
     }
@@ -181,21 +194,32 @@ def search_hybrid(
     query_embeddings = embedder.embed_batch([query_text])
     query_vector = query_embeddings[0].vector
 
-    # Resolve vector backend
-    vec_path = Path(pc.vector.path)
-    if not vec_path.is_absolute():
-        vec_path = ctx.product_root / vec_path
+    # Resolve vector backend. Must match build_vector_index() storage naming.
+    if cache_root:
+        vec_path = Path(cache_root)
+    else:
+        vec_path = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
 
     embedding_space_id = (
-        f"emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
+        f"corpus:backlog"
+        f"|emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
         f"|tok:{pc.tokenizer.adapter}:{pc.tokenizer.model}:max{pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)}"
         f"|chunk:{pc.chunking.version}"
         f"|metric:{pc.vector.metric}"
     )
 
+    sqlite_vec_db_path: Optional[Path] = None
+    if pc.vector.backend == "sqlite":
+        sqlite_vec_db_path = _resolve_sqlite_vector_db_path(
+            vec_path=vec_path,
+            collection=pc.vector.collection,
+            embedding_space_id=embedding_space_id,
+            product=product,
+        )
+
     vec_cfg = {
         "backend": pc.vector.backend,
-        "path": str(vec_path),
+        "path": str(sqlite_vec_db_path) if sqlite_vec_db_path else str(vec_path),
         "collection": pc.vector.collection,
         "embedding_space_id": embedding_space_id,
     }

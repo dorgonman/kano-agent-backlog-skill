@@ -4,6 +4,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from kano_backlog_cli.cli import app
+from conftest import write_project_backlog_config
 
 runner = CliRunner()
 
@@ -19,24 +20,7 @@ def _scaffold_product(tmp_path: Path, name: str, prefix: str) -> Path:
     for required_dir in ["decisions", "views", "_meta"]:
         (product_root / required_dir).mkdir(parents=True, exist_ok=True)
 
-    cfg_dir = product_root / "_config"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    cfg_text = f"""[product]
-name = "{name}"
-prefix = "{prefix}"
-
-[views]
-auto_refresh = false
-
-[log]
-verbosity = "info"
-debug = false
-"""
-    (cfg_dir / "config.toml").write_text(cfg_text, encoding="utf-8")
-
-    shared = backlog_root / "_shared"
-    shared.mkdir(parents=True, exist_ok=True)
-    (shared / "defaults.toml").write_text(f"default_product = \"{name}\"\n", encoding="utf-8")
+    write_project_backlog_config(tmp_path, products={name: (name, prefix)})
 
     return product_root
 
@@ -110,8 +94,12 @@ def test_feature_creation_with_parent(tmp_path: Path):
             ],
         )
         assert epic_result.exit_code == 0, epic_result.output
-        epic_id_line = next(line for line in epic_result.output.splitlines() if "Created:" in line)
-        epic_id = epic_id_line.split(":", 1)[-1].strip()
+        epic_id_line = next(
+            line
+            for line in epic_result.output.splitlines()
+            if line.strip().startswith("OK: Created:")
+        )
+        epic_id = epic_id_line.split(":", 2)[-1].strip()
 
         feature_result = runner.invoke(
             app,
@@ -130,10 +118,15 @@ def test_feature_creation_with_parent(tmp_path: Path):
                 "integration-test-product",
                 "--parent",
                 epic_id,
+                "--force",
             ],
         )
         assert feature_result.exit_code == 0, feature_result.output
-        feature_id_line = next(line for line in feature_result.output.splitlines() if "Created:" in line)
+        feature_id_line = next(
+            line
+            for line in feature_result.output.splitlines()
+            if line.strip().startswith("OK: Created:")
+        )
         feature_id = feature_id_line.split(":", 2)[-1].strip()
         assert feature_id.startswith("IT-FTR-")
 
