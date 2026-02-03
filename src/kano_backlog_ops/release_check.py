@@ -390,11 +390,13 @@ def run_phase2(
             passed=(rc == 0 or "sandbox already exists" in out_lower),
             message=f"exit={rc}",
             details=(
-                "Note: sandbox currently creates a single-product layout under _kano/backlog_sandbox/<name>/; "
-                "topic commands operate on _kano/backlog/topics, so topic smoke is run against the main backlog."
+                "Note: sandbox creates an isolated layout under _kano/backlog_sandbox/<name>/; "
+                "Phase2 topic smoke is executed against that sandbox root via --backlog-root-override."
             ),
         )
     )
+
+    sandbox_backlog_root = repo_root / "_kano" / "backlog_sandbox" / sandbox_name
 
     # Topic smoke (0.0.2 features)
     def smoke(
@@ -423,10 +425,16 @@ def run_phase2(
     smoke_topic_b = f"release-{version.replace('.', '-')}-smoke-b"
     snap_name = "smoke"
 
+    topic_base = [
+        "topic",
+        "--backlog-root-override",
+        str(sandbox_backlog_root),
+    ]
+
     smoke(
         "topic-create-a-template",
         [
-            "topic",
+            *topic_base,
             "create",
             smoke_topic_a,
             "--agent",
@@ -441,7 +449,7 @@ def run_phase2(
     smoke(
         "topic-create-b",
         [
-            "topic",
+            *topic_base,
             "create",
             smoke_topic_b,
             "--agent",
@@ -452,7 +460,7 @@ def run_phase2(
     smoke(
         "topic-add-reference",
         [
-            "topic",
+            *topic_base,
             "add-reference",
             smoke_topic_a,
             "--to",
@@ -463,7 +471,7 @@ def run_phase2(
     smoke(
         "topic-snapshot-create",
         [
-            "topic",
+            *topic_base,
             "snapshot",
             "create",
             smoke_topic_a,
@@ -478,7 +486,7 @@ def run_phase2(
     smoke(
         "topic-snapshot-list",
         [
-            "topic",
+            *topic_base,
             "snapshot",
             "list",
             smoke_topic_a,
@@ -489,7 +497,7 @@ def run_phase2(
     smoke(
         "topic-snapshot-restore",
         [
-            "topic",
+            *topic_base,
             "snapshot",
             "restore",
             smoke_topic_a,
@@ -502,7 +510,7 @@ def run_phase2(
     smoke(
         "topic-snapshot-cleanup-dry",
         [
-            "topic",
+            *topic_base,
             "snapshot",
             "cleanup",
             smoke_topic_a,
@@ -515,7 +523,7 @@ def run_phase2(
     smoke(
         "topic-merge-dry",
         [
-            "topic",
+            *topic_base,
             "merge",
             smoke_topic_a,
             smoke_topic_b,
@@ -528,7 +536,7 @@ def run_phase2(
     smoke(
         "topic-split-dry",
         [
-            "topic",
+            *topic_base,
             "split",
             smoke_topic_a,
             "--agent",
