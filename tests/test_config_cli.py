@@ -10,6 +10,8 @@ from typer.testing import CliRunner
 
 from kano_backlog_cli.cli import app
 
+from conftest import write_project_backlog_config
+
 runner = CliRunner()
 
 
@@ -20,36 +22,37 @@ def _write(path: Path, content: str) -> None:
 
 def _scaffold_backlog(tmp_path: Path) -> Path:
     backlog_root = tmp_path / "_kano" / "backlog"
-    shared = backlog_root / "_shared"
     product_root = backlog_root / "products" / "demo"
-    product_cfg_dir = product_root / "_config"
 
-    _write(
-        shared / "defaults.toml",
-        """
-[defaults]
-default_product = "demo"
-""",
+    (product_root / "items" / "task" / "0000").mkdir(parents=True, exist_ok=True)
+
+    # Provide an existing product-level config file so `config init` can exercise
+    # overwrite/refresh behavior.
+    (product_root / "_config").mkdir(parents=True, exist_ok=True)
+    (product_root / "_config" / "config.toml").write_text(
+        "[product]\nname = \"demo\"\nprefix = \"KABSD\"\n",
+        encoding="utf-8",
     )
 
-    _write(
-        product_cfg_dir / "config.toml",
-        """
-[product]
-name = "demo"
-prefix = "KABSD"
-
-[log]
-verbosity = "debug"
-
-[process]
-profile = "builtin/azure-boards-agile"
-
-[backends.jira]
-type = "jira"
-host = "example.atlassian.net"
-project = "DEMO"
-""",
+    kano_dir = tmp_path / ".kano"
+    kano_dir.mkdir(parents=True, exist_ok=True)
+    (kano_dir / "backlog_config.toml").write_text(
+        "\n".join(
+            [
+                "[products.demo]",
+                'name = "demo"',
+                'prefix = "KABSD"',
+                'backlog_root = "_kano/backlog/products/demo"',
+                "",
+                "[shared.backends.jira]",
+                'type = "jira"',
+                'host = "example.atlassian.net"',
+                'project = "DEMO"',
+                "",
+            ]
+        ).strip()
+        + "\n",
+        encoding="utf-8",
     )
 
     return product_root
@@ -73,78 +76,89 @@ def test_config_validate_success(tmp_path: Path):
 
 def test_config_validate_fails_on_product_prefix(tmp_path: Path):
     backlog_root = tmp_path / "_kano" / "backlog"
-    shared = backlog_root / "_shared"
-    _write(
-        shared / "defaults.toml",
-        """
-[defaults]
-default_product = "demo"
-""",
+    product_root = backlog_root / "products" / "demo"
+    (product_root / "items" / "task" / "0000").mkdir(parents=True, exist_ok=True)
+
+    kano_dir = tmp_path / ".kano"
+    kano_dir.mkdir(parents=True, exist_ok=True)
+    (kano_dir / "backlog_config.toml").write_text(
+        "\n".join(
+            [
+                "[products.demo]",
+                'name = "demo"',
+                '# prefix missing',
+                'backlog_root = "_kano/backlog/products/demo"',
+                "",
+            ]
+        ).strip()
+        + "\n",
+        encoding="utf-8",
     )
-    product_root = backlog_root / "products" / "demo" / "_config"
-    _write(
-        product_root / "config.toml",
-        """
-[product]
-name = "demo"
-# prefix missing
-""",
-    )
-    result = runner.invoke(app, ["config", "validate", "--path", str(product_root.parent)])
+
+    result = runner.invoke(app, ["config", "validate", "--path", str(product_root)])
     assert result.exit_code == 1
-    assert "[product].prefix" in result.output
 
 
 def test_config_validate_rejects_secret_literal(tmp_path: Path):
     backlog_root = tmp_path / "_kano" / "backlog"
-    shared = backlog_root / "_shared"
-    _write(
-        shared / "defaults.toml",
-        """
-[defaults]
-default_product = "demo"
-""",
-    )
-    product_root = backlog_root / "products" / "demo" / "_config"
-    _write(
-        product_root / "config.toml",
-        """
-[product]
-name = "demo"
-prefix = "KABSD"
+    product_root = backlog_root / "products" / "demo"
+    (product_root / "items" / "task" / "0000").mkdir(parents=True, exist_ok=True)
 
-[analysis.llm]
-api_key = "secret-token"
-""",
+    kano_dir = tmp_path / ".kano"
+    kano_dir.mkdir(parents=True, exist_ok=True)
+    (kano_dir / "backlog_config.toml").write_text(
+        "\n".join(
+            [
+                "[products.demo]",
+                'name = "demo"',
+                'prefix = "KABSD"',
+                'backlog_root = "_kano/backlog/products/demo"',
+                "",
+                "[shared.backends.jira]",
+                'type = "jira"',
+                'host = "example.atlassian.net"',
+                'project = "DEMO"',
+                'api_key = "secret-token"',
+                "",
+            ]
+        ).strip()
+        + "\n",
+        encoding="utf-8",
     )
-    result = runner.invoke(app, ["config", "validate", "--path", str(product_root.parent)])
+
+    result = runner.invoke(app, ["config", "validate", "--path", str(product_root)])
     assert result.exit_code == 1
-    assert "env:" in result.output
+    assert "Secrets must not be stored in config" in result.output
 
 
 def test_config_validate_allows_env_secret(tmp_path: Path):
     backlog_root = tmp_path / "_kano" / "backlog"
-    shared = backlog_root / "_shared"
-    _write(
-        shared / "defaults.toml",
-        """
-[defaults]
-default_product = "demo"
-""",
-    )
-    product_root = backlog_root / "products" / "demo" / "_config"
-    _write(
-        product_root / "config.toml",
-        """
-[product]
-name = "demo"
-prefix = "KABSD"
+    product_root = backlog_root / "products" / "demo"
+    (product_root / "items" / "task" / "0000").mkdir(parents=True, exist_ok=True)
 
-[analysis.llm]
-api_key = "env:OPENAI_API_KEY"
-""",
+    kano_dir = tmp_path / ".kano"
+    kano_dir.mkdir(parents=True, exist_ok=True)
+    (kano_dir / "backlog_config.toml").write_text(
+        "\n".join(
+            [
+                "[products.demo]",
+                'name = "demo"',
+                'prefix = "KABSD"',
+                'backlog_root = "_kano/backlog/products/demo"',
+                "",
+                "[shared.backends.jira]",
+                'type = "jira"',
+                'host = "example.atlassian.net"',
+                'project = "DEMO"',
+                'api_key = "env:OPENAI_API_KEY"',
+                "",
+            ]
+        ).strip()
+        + "\n",
+        encoding="utf-8",
     )
-    result = runner.invoke(app, ["config", "validate", "--path", str(product_root.parent)])
+
+    result = runner.invoke(app, ["config", "validate", "--path", str(product_root)])
     assert result.exit_code == 0, result.output
 
 

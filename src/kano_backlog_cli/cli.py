@@ -6,7 +6,13 @@ from pathlib import Path
 from typing import Optional
 import typer
 
-from .util import configure_stdio, ensure_core_on_path, resolve_product_root, set_global_config_file
+from .util import (
+    configure_stdio,
+    ensure_core_on_path,
+    load_env_file,
+    resolve_product_root,
+    set_global_config_file,
+)
 
 app = typer.Typer(help="kano-backlog: Backlog management CLI (MVP)")
 
@@ -21,8 +27,13 @@ def _init(
         file_okay=True,
         dir_okay=False,
         readable=True,
-    )
-    ,
+    ),
+    env_file: Optional[Path] = typer.Option(
+        None,
+        "--env-file",
+        help="Env file to load (default: env/local.secrets.env)",
+        envvar="KANO_ENV_FILE",
+    ),
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
@@ -31,6 +42,11 @@ def _init(
 ):
     configure_stdio()
     ensure_core_on_path()
+
+    if env_file is not None:
+        load_env_file(env_file, required=True)
+    else:
+        load_env_file(Path("env") / "local.secrets.env", required=False)
     
     # Store the config file path globally for use by utility functions
     if config_file:

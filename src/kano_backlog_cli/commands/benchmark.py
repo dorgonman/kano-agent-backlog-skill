@@ -15,7 +15,7 @@ def run(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (shorthand like embedding/local-noop OR path like .kano/backlog_config/usage.toml)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
     item_id: Optional[str] = typer.Option(
         None,

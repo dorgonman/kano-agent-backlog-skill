@@ -32,7 +32,7 @@ def build_index(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (path or shorthand; path-first, fallback to .kano/backlog_config)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
 ):
     """Build embedding index for files or full product."""
@@ -262,7 +262,7 @@ def query_index(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (path or shorthand; path-first, fallback to .kano/backlog_config)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
 ):
     """Query the embedding index for similar content."""
@@ -392,7 +392,7 @@ def index_status(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Profile (path or shorthand; path-first, fallback to .kano/backlog_config)",
+        help="Profile (path or shorthand; shorthand prefers .kano/backlog_config)",
     ),
 ):
     """Show embedding index status and metadata."""

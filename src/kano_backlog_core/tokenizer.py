@@ -45,7 +45,7 @@ except ImportError:  # pragma: no cover - optional dependency
 # Optional dependency: transformers
 try:
     import transformers  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
+except Exception:  # pragma: no cover - optional dependency
     transformers = None  # type: ignore
 
 # Model to max tokens mapping with expanded OpenAI model support

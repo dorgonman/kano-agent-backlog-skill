@@ -7,8 +7,11 @@ import pytest
 
 from kano_backlog_ops.backlog_chunks_db import build_chunks_db, query_chunks_fts
 
+from conftest import write_project_backlog_config
+
 
 def test_build_chunks_db_and_query(tmp_path: Path) -> None:
+    write_project_backlog_config(tmp_path)
     backlog_root = tmp_path / "_kano" / "backlog"
     product_root = backlog_root / "products" / "test-product"
     items_root = product_root / "items" / "task" / "0000"
@@ -51,6 +54,7 @@ Test the chunks DB build and query.
 
 
 def test_build_chunks_db_with_adr(tmp_path: Path) -> None:
+    write_project_backlog_config(tmp_path)
     backlog_root = tmp_path / "_kano" / "backlog"
     product_root = backlog_root / "products" / "test-product"
     decisions_dir = product_root / "decisions"
@@ -97,6 +101,7 @@ Simple deployment, no external dependencies.
 
 
 def test_build_chunks_db_with_topic(tmp_path: Path) -> None:
+    write_project_backlog_config(tmp_path)
     backlog_root = tmp_path / "_kano" / "backlog"
     topics_dir = backlog_root / "topics" / "test-topic"
     topics_dir.mkdir(parents=True)

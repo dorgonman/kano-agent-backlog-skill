@@ -78,6 +78,7 @@ dimension = 1536            # Vector dimension
 - **provider** (string, default: "noop"): Embedding service provider
   - `"noop"`: Testing provider that generates random vectors
   - `"openai"`: OpenAI embedding API
+  - `"gemini"`: Google Gemini embedding API (google-genai)
   - `"sentence-transformers"`: Local embeddings via HuggingFace sentence-transformers (optional dependency)
 - **model** (string): Model identifier for embedding generation
 - **dimension** (integer, default: 1536): Vector dimension size
@@ -92,6 +93,9 @@ dimension = 1536            # Vector dimension
 - `text-embedding-3-large`: 3072 dimensions  
 - `text-embedding-ada-002`: 1536 dimensions
 
+**Gemini Provider**:
+- `gemini-embedding-001`: typically 3072 dimensions (configurable via `output_dimensionality`)
+
 **sentence-transformers Provider** (local):
 - Model IDs like `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
 - Or a local directory path containing a downloaded model (no network)
@@ -105,6 +109,11 @@ Provider-specific options can be added under `[embedding.options]`:
 api_key = "sk-..."          # OpenAI API key (for openai provider)
 base_url = "https://..."    # Custom API endpoint
 timeout = 30                # Request timeout in seconds
+
+# Gemini options (for gemini provider)
+# api_key = "env:GEMINI_API_KEY"   # or env:GOOGLE_API_KEY
+# output_dimensionality = 3072     # Optional dimension override
+# task_type = "RETRIEVAL_DOCUMENT" # Optional task hint for embeddings
 
 # sentence-transformers options (for sentence-transformers provider)
 device = "cpu"              # Optional; defaults to sentence-transformers behavior

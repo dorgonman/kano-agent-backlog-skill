@@ -21,7 +21,6 @@ def refresh(
         ensure_core_on_path()
         from kano_backlog_core.config import ConfigLoader
         from kano_backlog_ops.view import refresh_dashboards as ops_refresh
-        from .config_cmd import _default_auto_export_path, _write_effective_config_artifact
         
         # Load config to get context and effective config
         # If backlog_root is not provided, resolve it from config
@@ -71,32 +70,6 @@ def refresh(
         
         # Call ops layer
         typer.echo("Refreshing views...")
-
-        # Best-effort: write effective config artifact for downstream tooling.
-        # This should not block view refresh.
-        # Only write in debug mode (when log.debug is enabled in config)
-        try:
-            # Check if debug mode is enabled
-            # Check both nested and flat key formats for compatibility
-            debug_enabled = (
-                effective.get("log", {}).get("debug", False) or 
-                effective.get("log.debug", False)
-            )
-            
-            if debug_enabled:
-                out_path = _default_auto_export_path(ctx, "toml", topic=None, workset_item_id=None)
-                _write_effective_config_artifact(
-                    ctx=ctx,
-                    effective=effective,
-                    fmt="toml",
-                    out_path=out_path,
-                    overwrite=True,
-                )
-                typer.echo(f"✓ Wrote effective config (debug mode): {out_path}")
-            else:
-                typer.echo("ℹ️  Skipped effective config export (debug mode disabled)")
-        except Exception as e:
-            typer.echo(f"⚠️  Could not write effective config artifact: {e}", err=True)
 
         config_path = Path(config) if config else None
         result = ops_refresh(

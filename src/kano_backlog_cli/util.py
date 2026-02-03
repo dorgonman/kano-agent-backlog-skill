@@ -40,6 +40,46 @@ def configure_stdio() -> None:
             continue
 
 
+def load_env_file(path: Path, *, required: bool = False) -> None:
+    """Load environment variables from a simple KEY=VALUE file.
+
+    Args:
+        path: Path to env file.
+        required: If True, raise when missing.
+    """
+    env_path = Path(path).expanduser().resolve()
+    if not env_path.exists():
+        if required:
+            raise SystemExit(f"Env file not found: {env_path}")
+        return
+
+    try:
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    except Exception as e:
+        raise SystemExit(f"Failed to read env file: {env_path}. Error: {e}")
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("export "):
+            stripped = stripped[7:].strip()
+        if "=" not in stripped:
+            continue
+
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+
+        if len(value) >= 2 and ((value[0] == value[-1]) and value[0] in {"'", '"'}):
+            value = value[1:-1]
+
+        if key not in os.environ:
+            os.environ[key] = value
+
+
 def ensure_core_on_path() -> None:
     try:
         import kano_backlog_core  # noqa: F401

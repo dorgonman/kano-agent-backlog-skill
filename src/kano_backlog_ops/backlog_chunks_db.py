@@ -477,12 +477,27 @@ def query_chunks_fts(
     query: str,
     k: int = 10,
     backlog_root: Optional[Path] = None,
+    cache_root: Optional[Path] = None,
+    custom_config_file: Optional[Path] = None,
 ) -> list[ChunkSearchRow]:
     """Keyword search over canonical chunks_fts."""
 
     backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
-    product_root = backlog_root_path / "products" / product
-    db_path = product_root / ".cache" / "chunks.sqlite3"
+
+    if cache_root:
+        cache_dir = Path(cache_root)
+    else:
+        try:
+            _, effective = ConfigLoader.load_effective_config(
+                backlog_root_path,
+                product=product,
+                custom_config_file=custom_config_file,
+            )
+            cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
+        except ConfigError:
+            cache_dir = backlog_root_path / "products" / product / ".cache"
+
+    db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
     if not db_path.exists():
         raise FileNotFoundError(f"Chunks DB not found: {db_path} (run chunks build first)")
 
@@ -552,6 +567,8 @@ def query_chunks_fts_candidates(
     query: str,
     k: int = 200,
     backlog_root: Optional[Path] = None,
+    cache_root: Optional[Path] = None,
+    custom_config_file: Optional[Path] = None,
     snippet_tokens: int = 20,
     snippet_prefix: str = "<mark>",
     snippet_suffix: str = "</mark>",
@@ -560,9 +577,20 @@ def query_chunks_fts_candidates(
     """Return top-N FTS candidates with snippets for hybrid rerank."""
 
     backlog_root_path, _ = _resolve_backlog_root(backlog_root, create_if_missing=False)
-    product_root = backlog_root_path / "products" / product
-    repo_root = backlog_root_path.parent.parent
-    cache_dir = repo_root / ".kano" / "cache" / "backlog"
+
+    if cache_root:
+        cache_dir = Path(cache_root)
+    else:
+        try:
+            _, effective = ConfigLoader.load_effective_config(
+                backlog_root_path,
+                product=product,
+                custom_config_file=custom_config_file,
+            )
+            cache_dir = ConfigLoader.get_chunks_cache_root(backlog_root_path, effective)
+        except ConfigError:
+            cache_dir = backlog_root_path / "products" / product / ".cache"
+
     db_path = cache_dir / f"backlog.{product}.chunks.v1.db"
     if not db_path.exists():
         raise FileNotFoundError(f"Chunks DB not found: {db_path} (run chunks build first)")

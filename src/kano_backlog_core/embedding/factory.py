@@ -48,6 +48,45 @@ def resolve_embedder(config: Dict[str, Any]) -> EmbeddingAdapter:
         except ImportError as e:
             raise ValueError(f"OpenAI adapter not available: {e}")
 
+    if provider in {"gemini", "google", "google-genai", "genai"}:
+        module_name = "google.genai"
+        try:
+            has_genai = importlib.util.find_spec(module_name) is not None
+        except ModuleNotFoundError:
+            has_genai = False
+
+        if not has_genai:
+            raise ValueError(
+                "google-genai adapter not available. Install with: pip install google-genai"
+            )
+
+        from .gemini_adapter import GeminiEmbeddingAdapter
+
+        options = config.get("options")
+        if isinstance(options, dict):
+            merged = dict(options)
+        else:
+            merged = {}
+
+        api_key = resolve_env_ref(config.get("api_key") or merged.get("api_key"))
+        output_dimensionality = (
+            config.get("output_dimensionality")
+            if "output_dimensionality" in config
+            else merged.get("output_dimensionality")
+        )
+        task_type = (
+            config.get("task_type") if "task_type" in config else merged.get("task_type")
+        )
+        dimension = config.get("dimension")
+
+        return GeminiEmbeddingAdapter(
+            model_name=model_name,
+            api_key=api_key,
+            output_dimensionality=output_dimensionality,
+            task_type=task_type,
+            dimension=dimension,
+        )
+
     if provider in {"sentence-transformers", "sentence_transformers", "huggingface"}:
         # Optional dependency gate: do not download a model here, but ensure the
         # library is available so config validation can fail fast.

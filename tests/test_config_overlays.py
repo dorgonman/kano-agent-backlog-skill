@@ -147,16 +147,25 @@ def test_load_profile_overrides_path_first_then_fallback_to_shorthand():
         profiles_root = tmp / ".kano" / "backlog_config" / "embedding"
         profiles_root.mkdir(parents=True, exist_ok=True)
         (profiles_root / "local-noop.toml").write_text("log_debug = true\n", encoding="utf-8")
+        (profiles_root.parent.parent / "backlog_config.toml").write_text(
+            "products = {}\n", encoding="utf-8"
+        )
 
         # Also create a repo-root relative file at embedding/local-noop.toml.
-        # Path-first semantics should prefer this file over shorthand.
+        # Shorthand should still prefer .kano/backlog_config.
         repo_rel = tmp / "embedding"
         repo_rel.mkdir(parents=True, exist_ok=True)
         (repo_rel / "local-noop.toml").write_text("log_debug = false\n", encoding="utf-8")
 
-        # Since repo-root relative file exists, it should be used (debug=false).
+        # Shorthand should prefer project profile (debug=true).
         overrides = ConfigLoader.load_profile_overrides(tmp, profile="embedding/local-noop")
-        assert overrides["log"]["debug"] is False
+        assert overrides["log"]["debug"] is True
+
+        # Explicit repo-root path should use the repo-root file (debug=false).
+        overrides_repo = ConfigLoader.load_profile_overrides(
+            tmp, profile=str(repo_rel / "local-noop.toml")
+        )
+        assert overrides_repo["log"]["debug"] is False
 
         # Explicit repo-root relative path should be used when it exists.
         direct_path = tmp / ".kano" / "backlog_config" / "embedding" / "local-noop.toml"

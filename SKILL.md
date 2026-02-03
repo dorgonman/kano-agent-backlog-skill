@@ -469,12 +469,23 @@ embedding provider) without editing the repo’s main `.kano/backlog_config.toml
   - Example:
     - `python skills/kano-agent-backlog-skill/scripts/kano-backlog --profile embedding/local-noop config show --product <product> --agent <agent-id>`
     - `python skills/kano-agent-backlog-skill/scripts/kano-backlog --profile embedding/local-sentence-transformers-minilm embedding build --product <product>`
+    - `python skills/kano-agent-backlog-skill/scripts/kano-backlog --profile embedding/gemini-embedding-001 embedding build --product <product>`
 
 **Optional: set a default profile in `.kano/backlog_config.toml`**
 - Add either:
   - `[defaults] profile = "embedding/local-noop"`, or
   - `[shared.profiles] active = "embedding/local-noop"`
 - CLI `--profile ...` always overrides the default.
+
+**Env file loading (local dev convenience)**
+- By default, the CLI will auto-load `env/local.secrets.env` if it exists.
+- Override the location with `--env-file <path>` or `KANO_ENV_FILE`.
+- Override behavior is path-only; existing environment variables are not replaced.
+
+**Config vs backlog storage locations (intentional separation)**
+- The **product list in config** is authoritative; it does not have to match folder names under `_kano/backlog/products/`.
+- A product can point to a **backlog stored elsewhere**: another repo, another drive, a mounted NAS path, or a DB-backed store.
+- Treat config as the registry of products; the physical backlog location is an implementation detail chosen per product.
 
 **Precedence**
 - Profile overlays are merged on top of the effective config (higher priority than repo defaults and topic/workset overlays in the current implementation).
@@ -692,9 +703,10 @@ _kano/backlog/.cache/worksets/items/<ITEM_ID>/
     - `--profile .kano/backlog_config/embedding/local-noop.toml`
   - **Shorthand mode**: profile ref resolved under `.kano/backlog_config/`
     - `--profile embedding/local-noop`
-- Ambiguity rule: the CLI will first check whether the `--profile` value matches an existing
-  file path (absolute or repo-root relative, with optional `.toml` suffix). If no such file
-  exists, it falls back to shorthand resolution under `.kano/backlog_config/`.
+- Precedence rule:
+  - **Explicit paths** (absolute, or starting with `.` or ending in `.toml`) are honored directly.
+  - **Shorthand** prefers `.kano/backlog_config/<ref>.toml` first.
+  - If no project-local profile exists, shorthand falls back to `<repo_root>/<ref>.toml`.
 - Use `--profile ...` on commands like:
   - `kano-backlog config show --product <product> --profile .kano/backlog_config/embedding/local-noop.toml`
   - `kano-backlog embedding build --product <product> --profile embedding/local-noop`

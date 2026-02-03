@@ -1,0 +1,22 @@
+# Built-in embedding profile: Google Gemini gemini-embedding-001
+# Requires: set GEMINI_API_KEY (or GOOGLE_API_KEY) in your environment.
+
+[embedding]
+provider = "gemini"
+model = "gemini-embedding-001"
+dimension = 3072
+api_key = "env:GEMINI_API_KEY"
+
+# Optional Gemini options
+# output_dimensionality = 3072
+# task_type = "RETRIEVAL_DOCUMENT"
+
+[vector]
+enabled = true
+backend = "sqlite"
+path = ".kano/cache/backlog/vector"
+collection = "backlog"
+metric = "cosine"
+
+[cache]
+root = ".kano/cache/backlog"

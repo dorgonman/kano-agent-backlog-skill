@@ -7,6 +7,8 @@ from typer.testing import CliRunner
 
 from kano_backlog_cli.cli import app
 
+from conftest import write_project_backlog_config
+
 runner = CliRunner()
 
 
@@ -15,31 +17,14 @@ def _scaffold_product(tmp_path: Path, name: str = "demo") -> tuple[Path, Path]:
     product_root = backlog_root / "products" / name
     items_root = product_root / "items"
 
+    prefix = name[:2].upper()
+    write_project_backlog_config(tmp_path, products={name: (name, prefix)})
+
     for item_type in ["epic", "feature", "userstory", "task", "bug"]:
         (items_root / item_type / "0000").mkdir(parents=True, exist_ok=True)
 
     for required_dir in ["decisions", "views", "_meta"]:
         (product_root / required_dir).mkdir(parents=True, exist_ok=True)
-
-    cfg_dir = product_root / "_config"
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    cfg_text = f"""
-[product]
-name = "{name}"
-prefix = "{name[:2].upper()}"
-
-[views]
-auto_refresh = false
-
-[log]
-verbosity = "info"
-debug = false
-"""
-    (cfg_dir / "config.toml").write_text(cfg_text.strip() + "\n", encoding="utf-8")
-
-    shared = backlog_root / "_shared"
-    shared.mkdir(parents=True, exist_ok=True)
-    (shared / "defaults.json").write_text(json.dumps({"default_product": name}), encoding="utf-8")
 
     return backlog_root, product_root
 
