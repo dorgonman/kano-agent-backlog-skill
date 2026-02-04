@@ -44,7 +44,6 @@ class EmbeddingConfig:
 class VectorConfig:
     enabled: bool = False
     backend: str = "sqlite"
-    path: str = ".cache/vector"
     collection: str = "backlog"
     metric: str = "cosine"
     options: Dict[str, Any] = field(default_factory=dict)
@@ -94,7 +93,6 @@ class PipelineConfig:
         vector = VectorConfig(
             enabled=v_data.get("enabled", False),
             backend=v_data.get("backend", "sqlite"),
-            path=v_data.get("path", ".cache/vector"),
             collection=v_data.get("collection", "backlog"),
             metric=v_data.get("metric", "cosine"),
             options=v_data.get("options", {})

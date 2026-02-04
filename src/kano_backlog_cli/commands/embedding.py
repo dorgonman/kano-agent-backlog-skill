@@ -93,7 +93,13 @@ def build_index(
         if source_id is None:
             raise typer.BadParameter("--source-id is required when using --text")
         sid: str = source_id
-        result = index_document(sid, text, pc, product_root=ctx.product_root)
+        result = index_document(
+            sid,
+            text,
+            pc,
+            product_root=ctx.product_root,
+            cache_root=cache_root,
+        )
         
         if output_format == "json":
             payload = {
@@ -170,7 +176,13 @@ def build_index(
         source_id = str(file_path)
         
         # Index the file
-        result = index_document(source_id, text_content, pc, product_root=ctx.project_root)
+        result = index_document(
+            source_id,
+            text_content,
+            pc,
+            product_root=ctx.project_root,
+            cache_root=cache_root,
+        )
         
         if output_format == "json":
             payload = {
@@ -225,7 +237,8 @@ def build_index(
             product=product,
             backlog_root=backlog_root,
             force=force,
-            cache_root=cache_root
+            cache_root=cache_root,
+            profile=profile,
         )
         
         if output_format == "json":
@@ -255,6 +268,7 @@ def query_index(
     product: str = typer.Option("kano-agent-backlog-skill", "--product", help="Product name"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+    cache_root: Optional[Path] = typer.Option(None, "--cache-root", help="Cache root directory (overrides config)"),
     # Tokenizer configuration options
     tokenizer_adapter: Optional[str] = typer.Option(None, "--tokenizer-adapter", help="Tokenizer adapter (auto, heuristic, tiktoken, huggingface)"),
     tokenizer_model: Optional[str] = typer.Option(None, "--tokenizer-model", help="Override tokenizer model name"),
@@ -312,20 +326,33 @@ def query_index(
     # Create embedding space ID for backend isolation
     max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)
     embedding_space_id = (
-        f"emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
+        f"corpus:backlog"
+        f"|emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
         f"|tok:{pc.tokenizer.adapter}:{pc.tokenizer.model}:max{max_tokens}"
         f"|chunk:{pc.chunking.version}"
         f"|metric:{pc.vector.metric}"
     )
     
-    # Resolve vector backend
-    vec_path = Path(pc.vector.path)
-    if not vec_path.is_absolute():
-        vec_path = ctx.product_root / vec_path
-        
+    # Resolve vector backend. Must match build_vector_index() naming.
+    if cache_root:
+        vec_path = Path(cache_root)
+    else:
+        vec_path = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
+
+    sqlite_vec_db_path: Optional[Path] = None
+    if pc.vector.backend == "sqlite":
+        from kano_backlog_ops.backlog_vector_index import _resolve_sqlite_vector_db_path
+
+        sqlite_vec_db_path = _resolve_sqlite_vector_db_path(
+            vec_path=vec_path,
+            collection=pc.vector.collection,
+            embedding_space_id=embedding_space_id,
+            product=product,
+        )
+
     vec_cfg = {
         "backend": pc.vector.backend,
-        "path": str(vec_path),
+        "path": str(sqlite_vec_db_path) if sqlite_vec_db_path else str(vec_path),
         "collection": pc.vector.collection,
         "embedding_space_id": embedding_space_id,
         **pc.vector.options
@@ -389,6 +416,7 @@ def index_status(
     product: str = typer.Option("kano-agent-backlog-skill", "--product", help="Product name"),
     backlog_root: Optional[Path] = typer.Option(None, "--backlog-root", help="Backlog root (_kano/backlog)"),
     output_format: str = typer.Option("markdown", "--format", help="Output format: markdown|json"),
+    cache_root: Optional[Path] = typer.Option(None, "--cache-root", help="Cache root directory (overrides config)"),
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
@@ -413,20 +441,33 @@ def index_status(
     # Create embedding space ID for backend isolation
     max_tokens = pc.tokenizer.max_tokens or resolve_model_max_tokens(pc.tokenizer.model)
     embedding_space_id = (
-        f"emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
+        f"corpus:backlog"
+        f"|emb:{pc.embedding.provider}:{pc.embedding.model}:d{pc.embedding.dimension}"
         f"|tok:{pc.tokenizer.adapter}:{pc.tokenizer.model}:max{max_tokens}"
         f"|chunk:{pc.chunking.version}"
         f"|metric:{pc.vector.metric}"
     )
     
-    # Resolve vector backend
-    vec_path = Path(pc.vector.path)
-    if not vec_path.is_absolute():
-        vec_path = ctx.product_root / vec_path
-        
+    # Resolve vector backend. Must match build_vector_index() naming.
+    if cache_root:
+        vec_path = Path(cache_root)
+    else:
+        vec_path = ConfigLoader.get_chunks_cache_root(ctx.backlog_root, effective)
+
+    sqlite_vec_db_path: Optional[Path] = None
+    if pc.vector.backend == "sqlite":
+        from kano_backlog_ops.backlog_vector_index import _resolve_sqlite_vector_db_path
+
+        sqlite_vec_db_path = _resolve_sqlite_vector_db_path(
+            vec_path=vec_path,
+            collection=pc.vector.collection,
+            embedding_space_id=embedding_space_id,
+            product=product,
+        )
+
     vec_cfg = {
         "backend": pc.vector.backend,
-        "path": str(vec_path),
+        "path": str(sqlite_vec_db_path) if sqlite_vec_db_path else str(vec_path),
         "collection": pc.vector.collection,
         "embedding_space_id": embedding_space_id,
         **pc.vector.options

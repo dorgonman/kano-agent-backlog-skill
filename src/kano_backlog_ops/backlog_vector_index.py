@@ -104,7 +104,8 @@ def index_document(
     text: str,
     config: PipelineConfig,
     *,
-    product_root: Optional[Path] = None
+    product_root: Optional[Path] = None,
+    cache_root: Optional[Path] = None,
 ) -> IndexResult:
     """Index a single document through the complete embedding pipeline.
     
@@ -158,10 +159,26 @@ def index_document(
             f"|metric:{config.vector.metric}"
         )
         
-        # Resolve vector path
-        vec_path = Path(config.vector.path)
-        if not vec_path.is_absolute() and product_root:
-            vec_path = product_root / vec_path
+        # Resolve vector base directory.
+        # Vectors are derived artifacts and should live under the shared cache root.
+        if cache_root is not None:
+            vec_path = Path(cache_root).resolve()
+        else:
+            # Best-effort default.
+            # If product_root matches the canonical layout `_kano/backlog/products/<product>`,
+            # resolve relative to the workspace root.
+            if product_root is not None:
+                pr = Path(product_root).resolve()
+                try:
+                    if pr.parent.name == "products" and pr.parent.parent.name == "backlog":
+                        repo_root = pr.parent.parent.parent.parent
+                        vec_path = (repo_root / ".kano" / "cache" / "backlog").resolve()
+                    else:
+                        vec_path = (Path.cwd() / ".kano" / "cache" / "backlog").resolve()
+                except Exception:
+                    vec_path = (Path.cwd() / ".kano" / "cache" / "backlog").resolve()
+            else:
+                vec_path = (Path.cwd() / ".kano" / "cache" / "backlog").resolve()
         
         vec_cfg = {
             "backend": config.vector.backend,
@@ -268,7 +285,8 @@ def build_vector_index(
     product: str,
     backlog_root: Optional[Path] = None,
     force: bool = False,
-    cache_root: Optional[Path] = None
+    cache_root: Optional[Path] = None,
+    profile: Optional[str] = None,
 ) -> VectorIndexResult:
     """Build vector index for a product."""
     t0 = time.perf_counter()
@@ -277,7 +295,8 @@ def build_vector_index(
     resource_path = backlog_root or Path(".")
     ctx, effective = ConfigLoader.load_effective_config(
         resource_path,
-        product=product
+        product=product,
+        profile=profile,
     )
     
     pc = ConfigLoader.validate_pipeline_config(effective)
@@ -326,7 +345,14 @@ def build_vector_index(
         )
 
         if force and sqlite_vec_db_path.exists():
-            sqlite_vec_db_path.unlink()
+            try:
+                sqlite_vec_db_path.unlink()
+            except PermissionError as exc:
+                logger.warning(
+                    "Vector DB is locked; skipping delete and continuing: %s",
+                    sqlite_vec_db_path,
+                )
+                logger.debug("Delete error: %s", exc)
     
     vec_cfg = {
         "backend": pc.vector.backend,
