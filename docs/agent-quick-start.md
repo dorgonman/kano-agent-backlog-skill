@@ -14,14 +14,44 @@ Use this guide when:
 
 When working with a cloned repository, install in **editable mode** so changes to the code take effect immediately.
 
+### Step 0: Create Virtual Environment (Strongly Recommended)
+
+**IMPORTANT:** Always use a virtual environment to avoid conflicts with system Python packages.
+
+**Windows (PowerShell):**
+```powershell
+# Create venv
+python -m venv .venv
+
+# Activate venv
+.\.venv\Scripts\Activate.ps1
+
+# Verify you're in venv (should show .venv path)
+where.exe python
+```
+
+**Linux/macOS (Bash):**
+```bash
+# Create venv
+python -m venv .venv
+
+# Activate venv
+source .venv/bin/activate
+
+# Verify you're in venv (should show .venv path)
+which python
+```
+
 ### Step 1: Verify Prerequisites
 
 ```bash
 # Check Python version (must be 3.8+)
 python --version
 
-# Check if in a virtual environment (recommended)
-which python  # Should show venv path, not system Python
+# Verify you're in a virtual environment (CRITICAL)
+# Windows: where.exe python
+# Linux/macOS: which python
+# Should show .venv path, NOT system Python
 ```
 
 ### Step 2: Install in Editable Mode
@@ -170,9 +200,11 @@ kano-backlog admin adr create \
 # - Alternatives: What else was considered?
 ```
 
-## Agent Identity
+## Agent Identity (CRITICAL)
 
-Always provide explicit `--agent` flag with your identity:
+**ALWAYS provide explicit `--agent` flag with your identity in EVERY command.**
+
+This is a **required parameter** for auditability and worklog tracking. Commands will fail without it.
 
 **Valid agent IDs:**
 - `kiro` - Amazon Kiro
@@ -190,7 +222,52 @@ Always provide explicit `--agent` flag with your identity:
 - ❌ `<AGENT_NAME>`
 - ❌ `auto`
 
+**Example - ALL commands need --agent:**
+```bash
+# ✅ Correct
+kano-backlog item create --type task --title "My task" --product my-app --agent kiro
+
+# ❌ Wrong - missing --agent
+kano-backlog item create --type task --title "My task" --product my-app
+```
+
 ## Troubleshooting
+
+### Windows: "ModuleNotFoundError: No module named 'kano_backlog_cli'"
+
+**Problem:** The `kano-backlog.exe` wrapper may have issues finding modules in some Windows environments
+
+**Solution (Recommended):** Use Python to call the script directly instead of the .exe wrapper:
+
+```powershell
+# Instead of: kano-backlog item create ...
+# Use this:
+python skills/kano-agent-backlog-skill/scripts/kano-backlog item create --type task --title "My task" --product my-app --agent kiro
+
+# For all commands, replace:
+# kano-backlog → python skills/kano-agent-backlog-skill/scripts/kano-backlog
+```
+
+**Why this happens:**
+- The `.exe` wrapper installed by pip may not correctly resolve the module path in editable mode
+- Calling Python directly bypasses the wrapper and uses the source code directly
+
+**Alternative:** Reinstall in a clean venv:
+```powershell
+# Deactivate current venv
+deactivate
+
+# Remove old venv
+Remove-Item -Recurse -Force .venv
+
+# Create fresh venv
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Reinstall
+cd skills/kano-agent-backlog-skill
+pip install -e ".[dev]"
+```
 
 ### "kano-backlog: command not found"
 
@@ -201,13 +278,38 @@ Always provide explicit `--agent` flag with your identity:
 # Verify installation
 pip show kano-agent-backlog-skill
 
-# If installed but not in PATH, try:
-python -m kano_backlog_cli.cli --version
+# If installed but not in PATH, use Python directly:
+python skills/kano-agent-backlog-skill/scripts/kano-backlog --version
 
 # Or reinstall:
 pip uninstall kano-agent-backlog-skill
 pip install -e ".[dev]"
 ```
+
+### "Missing --agent parameter"
+
+**Problem:** Command fails with error about missing `--agent` parameter
+
+**Solution:** The `--agent` flag is **REQUIRED** for all commands that modify the backlog:
+
+```bash
+# ❌ Wrong - will fail
+kano-backlog item create --type task --title "My task" --product my-app
+
+# ✅ Correct - includes --agent
+kano-backlog item create --type task --title "My task" --product my-app --agent kiro
+```
+
+**Commands that require --agent:**
+- `admin init`
+- `admin adr create`
+- `item create`
+- `item update-state`
+- `worklog append`
+- `workset init`
+- `topic create`
+
+See the [Agent Identity](#agent-identity-critical) section for valid agent IDs.
 
 ### "No module named 'kano_backlog_core'"
 
@@ -323,4 +425,8 @@ After setup, guide the user through:
 
 ---
 
-**Remember:** Always use `pip install -e ".[dev]"` for development mode, and always provide explicit `--agent` flags for auditability.
+**Remember:** 
+- **Always use a virtual environment** (`.venv`) to avoid package conflicts
+- **Always provide explicit `--agent` flags** for auditability
+- **On Windows, if you encounter module errors**, use `python skills/kano-agent-backlog-skill/scripts/kano-backlog` instead of `kano-backlog.exe`
+- Install with `pip install -e ".[dev]"` for development mode
