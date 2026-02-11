@@ -37,6 +37,30 @@ Use this skill to:
 - If you cannot confirm the footer marker, stop and ask for help; do not proceed with partial rules.
 - When generating per-agent guides, preserve this read-all requirement so downstream agents stay in sync.
 
+## Quick Start for Agents
+
+**If you're helping a user set up this skill from a cloned repository:**
+
+1. **Install in development mode:**
+   ```bash
+   cd skills/kano-agent-backlog-skill
+   pip install -e ".[dev]"
+   ```
+
+2. **Verify installation:**
+   ```bash
+   kano-backlog --version
+   kano-backlog doctor
+   ```
+
+3. **Initialize backlog:**
+   ```bash
+   cd /path/to/user/project
+   kano-backlog admin init --product <product-name> --agent <your-agent-id>
+   ```
+
+**See [docs/agent-quick-start.md](docs/agent-quick-start.md) for complete setup instructions.**
+
 ## Non-negotiables
 
 - Planning before coding: create/update items and meet the Ready gate before making code changes.

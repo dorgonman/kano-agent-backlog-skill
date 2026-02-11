@@ -84,6 +84,7 @@ kano-backlog item update-state MYAPP-TSK-0001 --state Done \
 
 ## Documentation
 
+- **[Agent Quick Start](docs/agent-quick-start.md)** - For AI agents: Install from cloned repo and initialize backlog
 - **[Quick Start Guide](docs/quick-start.md)** - Get started in 5-10 minutes
 - **[Installation Guide](docs/installation.md)** - System requirements and setup
 - **[Configuration Guide](docs/configuration.md)** - Profiles, environment variables, and settings
